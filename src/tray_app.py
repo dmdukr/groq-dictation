@@ -1,0 +1,480 @@
+"""System tray application for Groq Dictation."""
+
+import logging
+import os
+import threading
+import time
+from pathlib import Path
+from typing import Callable
+
+import keyboard
+from PIL import Image, ImageDraw
+from pystray import Icon, Menu, MenuItem
+
+from .config import AppConfig
+from .engine import DictationEngine, DictationState
+from .i18n import t
+
+logger = logging.getLogger(__name__)
+
+# Icon colors per state
+STATE_COLORS = {
+    DictationState.IDLE: "#888888",
+    DictationState.RECORDING: "#FF0000",
+    DictationState.PROCESSING: "#FFA500",
+    DictationState.TYPING: "#00AA00",
+    DictationState.ERROR: "#FF4444",
+}
+
+def _state_tooltip(state: DictationState) -> str:
+    from .i18n import t
+    _keys = {
+        DictationState.IDLE: "tray.ready",
+        DictationState.RECORDING: "tray.recording",
+        DictationState.PROCESSING: "tray.processing",
+        DictationState.TYPING: "tray.typing",
+        DictationState.ERROR: "tray.error",
+    }
+    return f"{t('tray.title')} — {t(_keys.get(state, 'tray.ready'))}"
+
+
+def _create_mic_icon(color: str, size: int = 64) -> Image.Image:
+    """Generate a microphone icon programmatically.
+
+    Returns a pre-converted RGBA image at multiple ICO sizes to avoid
+    PIL Image.convert/resize calls at runtime (not thread-safe, causes segfault
+    when pystray updates icon from a non-main thread).
+    """
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Microphone head (rounded rectangle)
+    draw.rounded_rectangle([20, 6, 44, 34], radius=8, fill=color)
+    # Stem
+    draw.rectangle([29, 34, 35, 44], fill=color)
+    # Arc (stand)
+    draw.arc([14, 20, 50, 48], 0, 180, fill=color, width=3)
+    # Base
+    draw.rectangle([24, 44, 40, 48], fill=color)
+
+    # Recording indicator (red dot) for recording state
+    if color == "#FF0000":
+        draw.ellipse([46, 2, 60, 16], fill="#FF0000", outline="#FFFFFF", width=2)
+
+    # Force RGBA conversion now (thread-safe at init time)
+    img = img.convert("RGBA")
+    return img
+
+
+class TrayApp:
+    """System tray application managing the Groq Dictation lifecycle."""
+
+    def __init__(self, engine: DictationEngine, config: AppConfig):
+        self._engine = engine
+        self._config = config
+        self._icon: Icon | None = None
+        self._icons: dict[DictationState, Image.Image] = {}
+        self._known_devices: set[str] = set()
+        self._suggested_device = None
+        self._ptt_suppressed = False
+        self._ptt_is_hold = False
+        self._ptt_press_time = 0.0
+
+        # Pre-render icons for each state
+        for state, color in STATE_COLORS.items():
+            self._icons[state] = _create_mic_icon(color)
+
+        # Register engine callbacks
+        self._engine.set_state_callback(self._on_state_changed)
+        self._engine.set_error_callback(self._on_error)
+        self._engine.set_quota_callback(self._on_quota_warning)
+        self._engine.set_suppress_ptt_callback(self._on_suppress_ptt)
+
+    def run(self) -> None:
+        """Run the tray app. Blocks the main thread."""
+        self._icon = Icon(
+            "groq-dictation",
+            self._icons[DictationState.IDLE],
+            _state_tooltip(DictationState.IDLE),
+            menu=self._create_menu(),
+        )
+        self._icon.run(setup=self._setup)
+
+    def _setup(self, icon: Icon) -> None:
+        """Called in a separate thread after icon is ready."""
+        icon.visible = True
+        logger.info(f"Tray app started, hotkey: {self._config.hotkey}")
+
+        # Register hotkeys
+        self._register_hotkeys()
+
+        # Pre-open mic stream in background (so first recording is instant)
+        import threading
+        def _prewarm():
+            try:
+                ac = self._engine.get_audio_capture()
+                if self._config.audio.mic_device_index is None:
+                    ac.select_device(None)  # auto-select best (prefers headset)
+                else:
+                    ac.select_device(self._config.audio.mic_device_index)
+                ac.start()
+                logger.info("Mic stream pre-opened for instant recording")
+                # Update tooltip with mic name
+                self._update_mic_tooltip()
+                # Remember known devices for headset detection
+                self._known_devices = ac.get_known_device_names()
+                # Start device watcher
+                self._start_device_watcher()
+            except Exception as e:
+                logger.warning(f"Mic pre-open failed: {e}")
+        threading.Thread(target=_prewarm, daemon=True).start()
+
+    def _register_hotkeys(self) -> None:
+        """Register hotkeys based on config mode."""
+        try:
+            keyboard.unhook_all()
+        except Exception:
+            pass
+
+        self._ptt_keys_pressed: set[str] = set()
+        self._ptt_active = False
+
+        mode = self._config.hotkey_mode
+        try:
+            if mode == "toggle":
+                # Toggle mode: single hotkey for start/stop
+                keyboard.add_hotkey(
+                    self._config.hotkey,
+                    self._engine.toggle,
+                    suppress=True,
+                )
+                logger.info(f"Toggle hotkey '{self._config.hotkey}' registered")
+
+            elif mode == "hold":
+                # Hold mode: hold combo to record, release to stop
+                # Parse PTT combo into individual keys
+                ptt = self._config.ptt_key
+                self._ptt_combo_keys = set(k.strip().lower() for k in ptt.split("+"))
+                # Hook all keyboard events for PTT tracking
+                keyboard.hook(self._on_ptt_event, suppress=False)
+                logger.info(f"Hold hotkey '{ptt}' registered (keys: {self._ptt_combo_keys})")
+
+        except Exception as e:
+            logger.error(f"Failed to register hotkeys: {e}")
+            self._on_error(f"Hotkey registration failed: {e}")
+
+    @staticmethod
+    def _normalize_key(name: str) -> str:
+        """Normalize keyboard event name to match settings format."""
+        mapping = {
+            "left windows": "win", "right windows": "win",
+            "left ctrl": "ctrl", "right ctrl": "ctrl",
+            "left alt": "alt", "right alt": "alt",
+            "left shift": "shift", "right shift": "shift",
+        }
+        low = name.lower()
+        return mapping.get(low, low)
+
+    def _on_ptt_event(self, event) -> None:
+        """Track key presses/releases for push-to-talk combo.
+
+        Algorithm:
+        - DOWN: start 0.5s timer. If still held after 0.5s → HOLD → start recording.
+        - UP before 0.5s: TAP → increment counter. Two taps within 0.5s → feedback.
+        - UP after hold: stop recording.
+        """
+        # Skip during feedback capture (grab_typed_text sends synthetic keys)
+        if self._ptt_suppressed:
+            return
+
+        raw_name = event.name if hasattr(event, 'name') else ""
+        key_name = self._normalize_key(raw_name) if raw_name else ""
+        if not key_name:
+            return
+
+        if event.event_type == "down":
+            self._ptt_keys_pressed.add(key_name)
+            if self._ptt_combo_keys.issubset(self._ptt_keys_pressed) and not self._ptt_active:
+                self._ptt_active = True
+                self._ptt_is_hold = False
+                self._ptt_press_time = time.monotonic()
+                # Start hold timer — if still pressed after 0.5s, begin recording
+                hold_id = time.monotonic()
+                self._ptt_hold_id = hold_id
+
+                def _hold_check():
+                    time.sleep(0.5)
+                    if self._ptt_active and self._ptt_hold_id == hold_id:
+                        self._ptt_is_hold = True
+                        logger.info("HOLD detected — starting recording")
+                        self._engine.start_if_idle()
+
+                threading.Thread(target=_hold_check, daemon=True).start()
+
+        elif event.event_type == "up":
+            was_in_combo = key_name in self._ptt_combo_keys
+            self._ptt_keys_pressed.discard(key_name)
+            if self._ptt_active and was_in_combo:
+                self._ptt_active = False
+                self._ptt_hold_id = 0  # cancel pending hold timer
+                if self._ptt_is_hold:
+                    # Was a hold — stop recording
+                    self._ptt_is_hold = False
+                    logger.info("HOLD released — stopping recording")
+                    threading.Thread(
+                        target=self._engine.stop_if_recording, daemon=True
+                    ).start()
+                else:
+                    # Was a tap (released before 0.5s)
+                    logger.info("TAP detected")
+                    self._engine.on_tap()
+
+    def _create_menu(self) -> Menu:
+        """Build the context menu."""
+        return Menu(
+            MenuItem(
+                "Start / Stop Dictation",
+                self._on_toggle_click,
+            ),
+            Menu.SEPARATOR,
+            MenuItem(
+                "Microphone",
+                self._create_mic_submenu(),
+            ),
+            Menu.SEPARATOR,
+            MenuItem(
+                t("tray.settings"),
+                self._on_settings_click,
+            ),
+            MenuItem(
+                t("tray.open_logs"),
+                self._on_log_click,
+            ),
+            MenuItem(
+                t("tray.open_profile"),
+                self._on_profile_click,
+            ),
+            Menu.SEPARATOR,
+            MenuItem(
+                "Restart",
+                self._on_restart_click,
+            ),
+            MenuItem(
+                t("tray.quit"),
+                self._on_quit_click,
+            ),
+        )
+
+    def _create_mic_submenu(self) -> Menu:
+        """Build microphone selection submenu."""
+        devices = self._engine.get_audio_capture().list_devices()
+        if not devices:
+            return Menu(MenuItem("No microphones found", None, enabled=False))
+
+        items = []
+        current = self._config.audio.mic_device_index
+        for dev in devices:
+            is_selected = dev.index == current
+            items.append(
+                MenuItem(
+                    f"{'* ' if is_selected else ''}{dev.name}",
+                    self._make_mic_selector(dev.index),
+                )
+            )
+
+        items.append(Menu.SEPARATOR)
+        items.append(
+            MenuItem(
+                f"{'* ' if current is None else ''}Auto (loudest)",
+                self._make_mic_selector(None),
+            )
+        )
+        return Menu(*items)
+
+    def _make_mic_selector(self, device_index: int | None) -> Callable:
+        """Create a callback for mic selection."""
+        def select(_icon=None, _item=None):
+            self._config.audio.mic_device_index = device_index
+            self._engine.get_audio_capture().select_device(device_index)
+            name = f"device {device_index}" if device_index is not None else "auto"
+            logger.info(f"Microphone switched to: {name}")
+            if self._icon and self._config.ui.show_notifications:
+                self._icon.notify(f"Microphone: {name}", t("tray.title"))
+            # Refresh menu
+            if self._icon:
+                self._icon.menu = self._create_menu()
+        return select
+
+    def _is_recording(self) -> bool:
+        """Check if engine is currently recording (to suppress noisy notifications)."""
+        return self._engine.state in (DictationState.RECORDING, DictationState.PROCESSING)
+
+    def _on_state_changed(self, state: DictationState) -> None:
+        """Update icon and tooltip on state change. No sound notifications during recording."""
+        if self._icon:
+            try:
+                self._icon.icon = self._icons.get(state, self._icons[DictationState.IDLE])
+                tooltip = _state_tooltip(state)
+                try:
+                    mic_name = self._engine._audio.get_active_device_name()
+                    if mic_name:
+                        tooltip += f"\nMic: {mic_name}"
+                except Exception:
+                    pass
+                self._icon.title = tooltip
+            except Exception as e:
+                logger.warning(f"Icon update failed (non-critical): {e}")
+
+            # Show pending notifications when recording ends
+            if state == DictationState.IDLE:
+                pending = getattr(self, '_pending_notification', None)
+                if pending:
+                    self._icon.notify(pending, t("tray.title"))
+                    self._pending_notification = None
+
+    def _on_error(self, message: str) -> None:
+        """Show error notification (only when not recording)."""
+        logger.error(f"Tray error notification: {message}")
+        if self._icon and self._config.ui.show_notifications and not self._is_recording():
+            self._icon.notify(f"Error: {message}", t("tray.title"))
+
+    def _on_quota_warning(self, remaining: int, limit: int) -> None:
+        """Show quota warning (only when not recording)."""
+        minutes = remaining // 60
+        total_min = limit // 60
+        msg = f"Groq free quota: {minutes} min remaining (of {total_min} min)"
+        logger.warning(msg)
+        # Defer notification until recording stops
+        if self._icon:
+            if not self._is_recording():
+                self._icon.notify(msg, t("tray.title"))
+            else:
+                # Queue it for after recording
+                self._pending_notification = msg
+
+    def _update_mic_tooltip(self) -> None:
+        """Update tray tooltip with current mic name."""
+        if self._icon:
+            try:
+                mic_name = self._engine.get_audio_capture().get_active_device_name()
+                self._icon.title = f"{_state_tooltip(DictationState.IDLE)}\n{t('tray.mic')}: {mic_name}"
+            except Exception:
+                pass
+
+    def _start_device_watcher(self) -> None:
+        """Periodically check for new headset/bluetooth devices and notify user."""
+        import threading
+
+        def _watch():
+            while True:
+                import time
+                time.sleep(10)  # check every 10 seconds
+                try:
+                    ac = self._engine.get_audio_capture()
+                    new_dev = ac.detect_new_headset(self._known_devices)
+                    if new_dev:
+                        # Update known set
+                        self._known_devices = ac.get_known_device_names()
+                        # Store the suggested device for menu action
+                        self._suggested_device = new_dev
+                        logger.info(f"New headset detected: {new_dev.name} (device {new_dev.index})")
+                        if self._icon and not self._is_recording():
+                            self._icon.notify(
+                                f"Headset detected: {new_dev.name}\nRight-click tray → switch mic",
+                                t("tray.title"),
+                            )
+                    else:
+                        # Update known set (devices may have disappeared)
+                        current = ac.get_known_device_names()
+                        if current != self._known_devices:
+                            self._known_devices = current
+                except Exception as e:
+                    logger.debug(f"Device watcher error: {e}")
+
+        t = threading.Thread(target=_watch, name="DeviceWatcher", daemon=True)
+        t.start()
+        logger.info("Device watcher started (10s interval)")
+
+    def _on_suppress_ptt(self, suppress: bool) -> None:
+        """Suppress or unsuppress PTT hook (during feedback text grab)."""
+        self._ptt_suppressed = suppress
+        if not suppress:
+            # Clear key state to avoid stuck keys from synthetic input
+            self._ptt_keys_pressed.clear()
+            self._ptt_active = False
+        logger.debug("PTT suppressed: %s", suppress)
+
+    def _on_toggle_click(self, _icon=None, _item=None) -> None:
+        self._engine.toggle()
+
+    def _on_settings_click(self, _icon=None, _item=None) -> None:
+        """Open GUI settings window."""
+        from .settings_ui import SettingsWindow
+        logger.info("Opening settings window")
+        settings = SettingsWindow(
+            self._config,
+            self._engine.get_audio_capture(),
+            on_save=self._on_settings_saved,
+        )
+        settings.show()
+
+    def _on_settings_saved(self) -> None:
+        """Re-register hotkeys and update mic after settings change."""
+        logger.info("Applying new settings...")
+        self._register_hotkeys()
+        # Update mic selection
+        self._engine.get_audio_capture().select_device(self._config.audio.mic_device_index)
+        # Refresh menu
+        if self._icon:
+            self._icon.menu = self._create_menu()
+
+    def _on_log_click(self, _icon=None, _item=None) -> None:
+        """Open log file in default editor."""
+        import subprocess
+        from .config import APP_DIR
+        log_path = APP_DIR / "logs" / self._config.logging.file
+        logger.info(f"Opening log: {log_path}")
+        try:
+            if log_path.exists():
+                subprocess.Popen(["notepad.exe", str(log_path)])
+            else:
+                logger.warning(f"Log file not found: {log_path}")
+        except Exception as e:
+            logger.error(f"Failed to open log: {e}")
+
+    def _on_profile_click(self, _icon=None, _item=None) -> None:
+        """Open user profile JSON in default editor."""
+        import subprocess
+        from .user_profile import PROFILE_PATH
+        logger.info(f"Opening profile: {PROFILE_PATH}")
+        try:
+            if PROFILE_PATH.exists():
+                subprocess.Popen(["notepad.exe", str(PROFILE_PATH)])
+            else:
+                logger.warning("Profile file not found, creating empty")
+                self._engine._profile.save(force=True)
+                subprocess.Popen(["notepad.exe", str(PROFILE_PATH)])
+        except Exception as e:
+            logger.error(f"Failed to open profile: {e}")
+
+    def _on_restart_click(self, _icon=None, _item=None) -> None:
+        """Restart the application (re-exec the process)."""
+        import subprocess, sys
+        from .main import release_single_instance
+        logger.info("Restarting application...")
+        self._engine.shutdown()
+        keyboard.unhook_all()
+        # Release mutex so new process can start
+        release_single_instance()
+        # Launch new instance
+        subprocess.Popen([sys.executable, "-m", "src"], cwd=str(Path(__file__).parent.parent))
+        if self._icon:
+            self._icon.stop()
+
+    def _on_quit_click(self, _icon=None, _item=None) -> None:
+        """Quit the application."""
+        logger.info("Quitting application")
+        self._engine.shutdown()
+        keyboard.unhook_all()
+        if self._icon:
+            self._icon.stop()

@@ -1,0 +1,49 @@
+groq:
+  api_key: ''
+  stt_model: whisper-large-v3-turbo
+  llm_model: llama-3.3-70b-versatile
+  stt_language: null
+  stt_temperature: 0.0
+audio:
+  mic_device_index: null
+  sample_rate: 16000
+  frame_duration_ms: 30
+  vad_aggressiveness: 2
+  silence_threshold_ms: 2000
+  min_chunk_duration_ms: 500
+  max_chunk_duration_s: 25
+  gain: 0.0
+hotkey: pause
+hotkey_mode: hold
+ptt_key: f12
+normalization:
+  enabled: true
+  prompt: 'You are a text normalizer. Fix punctuation, capitalization,
+
+    remove filler words (ну, ем, типа, like, uh, ehm, значит, короче, ну типа, как
+    бы).
+
+    Format numbers and dates properly. The text is multilingual (RU/UA/EN).
+
+    Do NOT change the meaning or translate between languages.
+
+    Return ONLY the corrected text without any explanation.'
+  known_terms:
+  - Home Assistant
+  - MQTT
+  - Zigbee
+  - Groq
+  temperature: 0.1
+text_injection:
+  method: sendinput
+  typing_delay_ms: 5
+  backspace_batch_size: 50
+ui:
+  show_notifications: true
+  sound_on_start: true
+  sound_on_stop: true
+logging:
+  level: INFO
+  file: groq-dictation.log
+  max_size_mb: 5
+  backup_count: 3

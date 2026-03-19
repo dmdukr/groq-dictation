@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+dist/
+build/
+*.egg-info/
+.eggs/
+*.log
+venv/
+.venv/
+.venv312/
+installer_output/
+norm_test.txt
+result*.txt
+*.wav
