@@ -170,16 +170,7 @@ class DictationEngine:
         with self._state_lock:
             if self._state == DictationState.RECORDING:
                 logger.info("Recording cancelled (tap)")
-                try:
-                    self._overlay.hide()
-                except Exception:
-                    pass
-                if self._chunker:
-                    try:
-                        self._chunker.stop()
-                    except Exception:
-                        pass
-                    self._chunker = None
+                self._cleanup()
                 self._set_state(DictationState.IDLE)
 
     def stop_if_recording(self) -> None:
@@ -314,9 +305,7 @@ class DictationEngine:
         recording_duration = time.monotonic() - getattr(self, '_recording_start_time', 0)
         if recording_duration < 1.0:
             logger.info(f"Recording too short ({recording_duration:.1f}s < 1.0s), discarding")
-            if self._chunker:
-                self._chunker.stop()
-                self._chunker = None
+            self._cleanup()
             self._set_state(DictationState.IDLE)
             return
 
@@ -346,6 +335,7 @@ class DictationEngine:
 
             if not full_text.strip():
                 logger.info("No speech detected in session")
+                self._cleanup()
                 if self._error_callback:
                     self._error_callback("No speech detected")
                 self._set_state(DictationState.IDLE)
@@ -363,10 +353,12 @@ class DictationEngine:
                     self._executor,
                 )
             else:
+                self._cleanup()
                 self._set_state(DictationState.IDLE)
 
         except Exception as e:
             logger.error(f"Error stopping recording: {e}")
+            self._cleanup()
             self._set_state(DictationState.ERROR)
             if self._error_callback:
                 self._error_callback(f"Error: {e}")
@@ -459,9 +451,17 @@ class DictationEngine:
                 llm_model=self._config.groq.llm_model,
                 char_count=len(normalized_text),
             )
+            # Close mic stream (opens on demand at next key press)
+            if self._audio.is_running:
+                try:
+                    self._audio.stop()
+                    logger.info("Mic closed after normalization")
+                except Exception:
+                    pass
             self._set_state(DictationState.IDLE)
         except Exception as e:
             logger.error(f"Error during text replacement: {e}")
+            self._cleanup()
             self._set_state(DictationState.ERROR)
             if self._error_callback:
                 self._error_callback(f"Text replacement failed: {e}")
@@ -592,7 +592,7 @@ class DictationEngine:
         self._set_state(DictationState.IDLE)
 
     def _cleanup(self) -> None:
-        """Clean up recording resources (keeps mic stream open)."""
+        """Clean up recording resources and close mic stream."""
         try:
             self._overlay.hide()
         except Exception:
@@ -609,6 +609,13 @@ class DictationEngine:
             except Exception:
                 pass
             self._chunker = None
+        # Close mic stream (opens on demand at next key press)
+        if self._audio.is_running:
+            try:
+                self._audio.stop()
+                logger.info("Mic stream closed after session")
+            except Exception:
+                pass
 
     def shutdown(self) -> None:
         """Graceful shutdown — close everything."""

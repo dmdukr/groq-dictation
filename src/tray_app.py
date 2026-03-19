@@ -113,26 +113,22 @@ class TrayApp:
         # Register hotkeys
         self._register_hotkeys()
 
-        # Pre-open mic stream in background (so first recording is instant)
+        # Select mic device (but don't open stream — opened on demand at key press)
         import threading
-        def _prewarm():
+        def _init_mic():
             try:
                 ac = self._engine.get_audio_capture()
                 if self._config.audio.mic_device_index is None:
                     ac.select_device(None)  # auto-select best (prefers headset)
                 else:
                     ac.select_device(self._config.audio.mic_device_index)
-                ac.start()
-                logger.info("Mic stream pre-opened for instant recording")
-                # Update tooltip with mic name
+                logger.info("Mic device selected (stream opens on demand)")
                 self._update_mic_tooltip()
-                # Remember known devices for headset detection
                 self._known_devices = ac.get_known_device_names()
-                # Start device watcher
                 self._start_device_watcher()
             except Exception as e:
-                logger.warning(f"Mic pre-open failed: {e}")
-        threading.Thread(target=_prewarm, daemon=True).start()
+                logger.warning(f"Mic init failed: {e}")
+        threading.Thread(target=_init_mic, daemon=True).start()
 
         # Start auto-updater
         self._updater.start()
@@ -206,12 +202,25 @@ class TrayApp:
                 self._ptt_active = True
                 self._ptt_is_hold = False
                 self._ptt_press_time = time.monotonic()
-                # Start hold timer — if still pressed after 0.5s, begin recording
+
+                # Start hold timer — open mic at 0.3s (warm up), start recording at 0.5s
                 hold_id = time.monotonic()
                 self._ptt_hold_id = hold_id
 
                 def _hold_check():
-                    time.sleep(0.5)
+                    # Wait 0.3s then open mic (gives 0.2s to warm up before recording)
+                    time.sleep(0.3)
+                    if not (self._ptt_active and self._ptt_hold_id == hold_id):
+                        return  # released before 0.3s — it's a tap, don't open mic
+                    ac = self._engine.get_audio_capture()
+                    if not ac.is_running:
+                        try:
+                            ac.start()
+                            logger.info("Mic opened (hold > 0.3s, warming up)")
+                        except Exception as e:
+                            logger.warning(f"Mic open failed: {e}")
+                    # Wait remaining 0.2s then start recording
+                    time.sleep(0.2)
                     if self._ptt_active and self._ptt_hold_id == hold_id:
                         self._ptt_is_hold = True
                         logger.info("HOLD detected — starting recording")
@@ -233,7 +242,7 @@ class TrayApp:
                         target=self._engine.stop_if_recording, daemon=True
                     ).start()
                 else:
-                    # Was a tap (released before 0.5s)
+                    # Was a tap (released before 0.3s — mic was never opened)
                     logger.info("TAP detected")
                     self._engine.on_tap()
 
@@ -430,8 +439,12 @@ class TrayApp:
         )
         settings.show()
 
-    def _on_settings_saved(self) -> None:
+    def _on_settings_saved(self, restart: bool = False) -> None:
         """Re-register hotkeys and update mic after settings change."""
+        if restart:
+            logger.info("Restarting after settings change...")
+            self._on_restart_click()
+            return
         logger.info("Applying new settings...")
         self._register_hotkeys()
         # Update mic selection

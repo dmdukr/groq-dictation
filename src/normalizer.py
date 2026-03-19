@@ -30,6 +30,7 @@ RULES:
 9. Do NOT add any text that wasn't in the original.
 10. Return ONLY the corrected text, no explanations.
 
+{lang_instruction}
 {profile_instruction}
 {terms_instruction}
 {context_instruction}
@@ -46,9 +47,10 @@ RULES:
 3. If a sentence is clearly unfinished or broken, reconstruct it to the most likely intended meaning.
 4. Keep the style natural — this is dictated speech, not formal writing.
 5. Do NOT change the meaning or add new information.
-6. Do NOT translate between languages.
+6. CRITICALLY IMPORTANT: Do NOT translate between languages. Keep Ukrainian as Ukrainian, Russian as Russian, English as English.
 7. Return ONLY the polished text, no explanations.
 
+{lang_instruction}
 {context_instruction}
 
 TEXT TO POLISH:
@@ -69,6 +71,42 @@ class Normalizer:
             timeout=30.0,
         )
 
+    @staticmethod
+    def _detect_language_instruction(text: str) -> str:
+        """Detect dominant language by character analysis and return instruction."""
+        # Ukrainian-specific letters (not in Russian)
+        uk_chars = set("іїєґІЇЄҐ")
+        # Russian-specific letters (not in Ukrainian)
+        ru_chars = set("ёъыЁЪЫэЭ")
+        # Latin
+        latin_count = sum(1 for c in text if c.isalpha() and c.isascii())
+        cyrillic_count = sum(1 for c in text if c.isalpha() and not c.isascii())
+        uk_count = sum(1 for c in text if c in uk_chars)
+        ru_count = sum(1 for c in text if c in ru_chars)
+
+        total = latin_count + cyrillic_count
+        if total == 0:
+            return ""
+
+        parts = []
+        if cyrillic_count > latin_count:
+            if uk_count > 0 and ru_count == 0:
+                parts.append("DETECTED LANGUAGE: Ukrainian. Output MUST be in Ukrainian. Do NOT translate to Russian.")
+            elif ru_count > 0 and uk_count == 0:
+                parts.append("DETECTED LANGUAGE: Russian. Output MUST be in Russian. Do NOT translate to Ukrainian.")
+            elif uk_count > ru_count:
+                parts.append("DETECTED LANGUAGE: Ukrainian (with some Russian). Keep Ukrainian as dominant language.")
+            elif ru_count > uk_count:
+                parts.append("DETECTED LANGUAGE: Russian (with some Ukrainian). Keep Russian as dominant language.")
+            else:
+                parts.append("DETECTED LANGUAGE: Cyrillic (Ukrainian/Russian). Preserve the original language, do NOT translate.")
+        elif latin_count > cyrillic_count:
+            parts.append("DETECTED LANGUAGE: English. Output MUST be in English.")
+        else:
+            parts.append("DETECTED LANGUAGE: Mixed. Preserve each word's original language.")
+
+        return "\n".join(parts)
+
     def normalize(self, raw_text: str, context: str = "") -> str:
         """Two-pass normalization: fix errors, then polish.
 
@@ -81,6 +119,9 @@ class Normalizer:
 
         if not self._norm_config.enabled:
             return raw_text
+
+        # Detect dominant language of the phrase
+        lang_instruction = self._detect_language_instruction(raw_text)
 
         # Build instructions
         profile_instruction = ""
@@ -103,18 +144,20 @@ class Normalizer:
             profile_instruction=profile_instruction,
             terms_instruction=terms_instruction,
             context_instruction=context_instruction,
+            lang_instruction=lang_instruction,
             text=raw_text,
         )
-        pass1_result = self._call_llm(pass1_prompt, "pass1")
+        pass1_result = self._call_llm(pass1_prompt, "pass1", lang_instruction)
         if not pass1_result:
             return raw_text
 
         # Pass 2: Polish grammar and coherence
         pass2_prompt = PASS2_PROMPT.format(
+            lang_instruction=lang_instruction,
             context_instruction=context_instruction,
             text=pass1_result,
         )
-        pass2_result = self._call_llm(pass2_prompt, "pass2")
+        pass2_result = self._call_llm(pass2_prompt, "pass2", lang_instruction)
 
         final = pass2_result or pass1_result
         logger.info(
@@ -141,7 +184,7 @@ class Normalizer:
                 future = pool.submit(self.normalize, raw_text, context)
                 callback(future.result())
 
-    def _call_llm(self, prompt: str, pass_name: str) -> str | None:
+    def _call_llm(self, prompt: str, pass_name: str, lang_instruction: str = "") -> str | None:
         """Call Groq LLM with retry."""
         try:
             # Use compiled prompt from profile if available, else default
@@ -157,6 +200,10 @@ class Normalizer:
                 compiled = self._profile.get_prompt_context()
                 if compiled:
                     system_prompt = compiled
+
+            # Always append language instruction to system prompt
+            if lang_instruction:
+                system_prompt += f"\n\nCRITICAL LANGUAGE RULE: {lang_instruction}"
 
             resp = self._http.post(
                 "/chat/completions",

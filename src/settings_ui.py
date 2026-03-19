@@ -99,7 +99,7 @@ class SettingsWindow:
 
         self._show_key_var = tk.BooleanVar(master=self._window, value=False)
         ttk.Checkbutton(
-            tab_api, text="Show key", variable=self._show_key_var,
+            tab_api, text=t("settings.show_key"), variable=self._show_key_var,
             command=lambda: api_entry.config(show="" if self._show_key_var.get() else "*"),
         ).grid(row=1, column=1, sticky="w", padx=(8, 0))
 
@@ -128,27 +128,49 @@ class SettingsWindow:
         ])
         llm_combo.grid(row=4, column=1, sticky="w", pady=4, padx=(8, 0))
 
-        ttk.Label(tab_api, text=t("settings.language")).grid(row=5, column=0, sticky="w", pady=4)
-        self._language_var = tk.StringVar(
-            value=self._config.groq.stt_language or "auto"
-        )
-        lang_combo = ttk.Combobox(tab_api, textvariable=self._language_var, width=20, values=[
-            "auto", "uk", "ru", "en", "de", "fr", "es", "pl",
-        ])
-        lang_combo.grid(row=4, column=1, sticky="w", pady=4, padx=(8, 0))
+        ttk.Label(tab_api, text=t("settings.language")).grid(row=5, column=0, sticky="nw", pady=4)
+        lang_frame = ttk.Frame(tab_api)
+        lang_frame.grid(row=5, column=1, sticky="w", padx=(8, 0), pady=4)
+
+        # All Whisper-supported languages
+        self._all_languages = [
+            ("uk", "Українська"), ("ru", "Русский"), ("en", "English"),
+            ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
+            ("pl", "Polski"), ("it", "Italiano"), ("pt", "Português"),
+            ("nl", "Nederlands"), ("tr", "Türkçe"), ("cs", "Čeština"),
+            ("ja", "日本語"), ("zh", "中文"), ("ko", "한국어"),
+        ]
+
+        # Parse current language config (comma-separated or single)
+        current_langs = set()
+        if self._config.groq.stt_language:
+            current_langs = {l.strip() for l in self._config.groq.stt_language.split(",")}
+
+        self._lang_vars: dict[str, tk.BooleanVar] = {}
+        for i, (code, name) in enumerate(self._all_languages):
+            var = tk.BooleanVar(master=self._window, value=(code in current_langs) if current_langs else False)
+            self._lang_vars[code] = var
+            col = i % 3
+            row = i // 3
+            ttk.Checkbutton(lang_frame, text=f"{name}", variable=var).grid(
+                row=row, column=col, sticky="w", padx=(0, 12),
+            )
+
+        ttk.Label(tab_api, text=t("settings.language_hint"),
+                  foreground="gray").grid(row=6, column=0, columnspan=2, sticky="w", padx=(0, 0))
 
         tab_api.columnconfigure(1, weight=1)
 
         # --- Tab 2: Audio ---
         tab_audio = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_audio, text="  Audio  ")
+        notebook.add(tab_audio, text=f"  {t('settings.tab_audio')}  ")
 
-        ttk.Label(tab_audio, text="Microphone:").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(tab_audio, text=t("settings.mic_device")).grid(row=0, column=0, sticky="w", pady=4)
         devices = self._audio.list_devices()
-        device_names = ["Auto (loudest)"] + [f"[{d.index}] {d.name}" for d in devices]
+        device_names = [t("settings.mic_auto")] + [f"[{d.index}] {d.name}" for d in devices]
         self._mic_var = tk.StringVar(master=self._window)
         if self._config.audio.mic_device_index is None:
-            self._mic_var.set("Auto (loudest)")
+            self._mic_var.set(t("settings.mic_auto"))
         else:
             for d in devices:
                 if d.index == self._config.audio.mic_device_index:
@@ -157,20 +179,20 @@ class SettingsWindow:
         mic_combo = ttk.Combobox(tab_audio, textvariable=self._mic_var, width=45, values=device_names)
         mic_combo.grid(row=0, column=1, sticky="we", pady=4, padx=(8, 0))
 
-        ttk.Label(tab_audio, text="Noise filter:").grid(row=1, column=0, sticky="nw", pady=4)
+        ttk.Label(tab_audio, text=t("settings.noise_filter")).grid(row=1, column=0, sticky="nw", pady=4)
         self._vad_var = tk.IntVar(master=self._window, value=self._config.audio.vad_aggressiveness)
         vad_frame = ttk.Frame(tab_audio)
         vad_frame.grid(row=1, column=1, sticky="w", padx=(8, 0))
         vad_labels = {
-            0: "All sounds (noisy rooms)",
-            1: "Soft filter",
-            2: "Balanced (recommended)",
-            3: "Strict (only clear speech)",
+            0: t("settings.vad_0"),
+            1: t("settings.vad_1"),
+            2: t("settings.vad_2"),
+            3: t("settings.vad_3"),
         }
         for val, label in vad_labels.items():
             ttk.Radiobutton(vad_frame, text=label, variable=self._vad_var, value=val).pack(anchor="w")
 
-        ttk.Label(tab_audio, text="Pause to split:").grid(row=2, column=0, sticky="w", pady=(12, 4))
+        ttk.Label(tab_audio, text=t("settings.pause_to_split")).grid(row=2, column=0, sticky="w", pady=(12, 4))
         self._silence_var = tk.IntVar(master=self._window, value=self._config.audio.silence_threshold_ms)
         silence_frame = ttk.Frame(tab_audio)
         silence_frame.grid(row=2, column=1, sticky="we", pady=(12, 4), padx=(8, 0))
@@ -182,59 +204,66 @@ class SettingsWindow:
         self._silence_var.trace_add("write", lambda *_: self._silence_label.config(
             text=f"{self._silence_var.get()} ms"
         ))
-        ttk.Label(tab_audio, text="How long to wait in silence before sending audio for recognition",
+        ttk.Label(tab_audio, text=t("settings.pause_hint"),
                   foreground="gray").grid(row=3, column=1, sticky="w", padx=(8, 0))
 
         tab_audio.columnconfigure(1, weight=1)
 
         # --- Tab 3: Dictation ---
         tab_dict = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_dict, text="  Dictation  ")
+        notebook.add(tab_dict, text=f"  {t('settings.tab_dictation')}  ")
 
-        ttk.Label(tab_dict, text="Hotkey:").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(tab_dict, text=t("settings.hotkey_label")).grid(row=0, column=0, sticky="w", pady=4)
         hotkey_frame = ttk.Frame(tab_dict)
         hotkey_frame.grid(row=0, column=1, sticky="w", padx=(8, 0), pady=4)
         self._hotkey_var = tk.StringVar(master=self._window, value=self._config.hotkey)
         self._hotkey_entry = ttk.Entry(hotkey_frame, textvariable=self._hotkey_var, width=25, state="readonly")
         self._hotkey_entry.pack(side="left")
-        self._record_btn = ttk.Button(hotkey_frame, text="Record...", command=self._start_hotkey_capture)
+        self._record_btn = ttk.Button(hotkey_frame, text=t("settings.record_btn"), command=self._start_hotkey_capture)
         self._record_btn.pack(side="left", padx=(8, 0))
 
-        ttk.Label(tab_dict, text="Recording mode:").grid(row=1, column=0, sticky="nw", pady=4)
+        ttk.Label(tab_dict, text=t("settings.recording_mode")).grid(row=1, column=0, sticky="nw", pady=4)
         mode_frame = ttk.Frame(tab_dict)
         mode_frame.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=4)
         self._hotkey_mode_var = tk.StringVar(master=self._window, value=self._config.hotkey_mode)
-        ttk.Radiobutton(mode_frame, text="Toggle: press to start, press again to stop",
+        ttk.Radiobutton(mode_frame, text=t("settings.mode_toggle"),
                         variable=self._hotkey_mode_var, value="toggle").pack(anchor="w")
-        ttk.Radiobutton(mode_frame, text="Hold: record while key is held down",
+        ttk.Radiobutton(mode_frame, text=t("settings.mode_hold"),
                         variable=self._hotkey_mode_var, value="hold").pack(anchor="w")
 
-        ttk.Label(tab_dict, text="Hold key:").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(tab_dict, text=t("settings.hold_key")).grid(row=2, column=0, sticky="w", pady=4)
         ptt_frame = ttk.Frame(tab_dict)
         ptt_frame.grid(row=2, column=1, sticky="w", padx=(8, 0), pady=4)
         self._ptt_var = tk.StringVar(master=self._window, value=self._config.ptt_key)
         self._ptt_entry = ttk.Entry(ptt_frame, textvariable=self._ptt_var, width=15, state="readonly")
         self._ptt_entry.pack(side="left")
-        self._ptt_record_btn = ttk.Button(ptt_frame, text="Record...", command=self._start_ptt_capture)
+        self._ptt_record_btn = ttk.Button(ptt_frame, text=t("settings.record_btn"), command=self._start_ptt_capture)
         self._ptt_record_btn.pack(side="left", padx=(8, 0))
-        ttk.Label(tab_dict, text="Key to hold for push-to-talk (only in Hold mode)",
+        ttk.Label(tab_dict, text=t("settings.hold_hint"),
                   foreground="gray").grid(row=3, column=1, sticky="w", padx=(8, 0))
 
         self._normalize_var = tk.BooleanVar(master=self._window, value=self._config.normalization.enabled)
-        ttk.Checkbutton(tab_dict, text="Enable LLM normalization after dictation",
+        ttk.Checkbutton(tab_dict, text=t("settings.normalize_check"),
                         variable=self._normalize_var).grid(row=5, column=0, columnspan=2, sticky="w", pady=8)
 
         self._sound_start_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_start)
-        ttk.Checkbutton(tab_dict, text="Beep on recording start",
+        ttk.Checkbutton(tab_dict, text=t("settings.beep_start"),
                         variable=self._sound_start_var).grid(row=6, column=0, columnspan=2, sticky="w", pady=2)
 
         self._sound_stop_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_stop)
-        ttk.Checkbutton(tab_dict, text="Beep on recording stop",
+        ttk.Checkbutton(tab_dict, text=t("settings.beep_stop"),
                         variable=self._sound_stop_var).grid(row=7, column=0, columnspan=2, sticky="w", pady=2)
 
         self._notif_var = tk.BooleanVar(master=self._window, value=self._config.ui.show_notifications)
-        ttk.Checkbutton(tab_dict, text="Show tray notifications",
+        ttk.Checkbutton(tab_dict, text=t("settings.show_notif"),
                         variable=self._notif_var).grid(row=8, column=0, columnspan=2, sticky="w", pady=2)
+
+        # Double-tap feedback hint
+        feedback_hint = tk.Label(
+            tab_dict, text=t("settings.feedback_hint"),
+            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left", wraplength=450,
+        )
+        feedback_hint.grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 4))
 
         self._autostart_var = tk.BooleanVar(master=self._window, value=_get_autostart())
         ttk.Checkbutton(tab_dict, text=t("settings.autostart"),
@@ -249,22 +278,7 @@ class SettingsWindow:
 
         tab_dict.columnconfigure(1, weight=1)
 
-        # --- Tab 4: Normalization prompt ---
-        tab_norm = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_norm, text="  Normalization  ")
-
-        ttk.Label(tab_norm, text="System prompt for text cleanup:").pack(anchor="w")
-        self._prompt_text = tk.Text(tab_norm, height=10, width=55, wrap="word")
-        self._prompt_text.pack(fill="both", expand=True, pady=4)
-        self._prompt_text.insert("1.0", self._config.normalization.prompt)
-
-        ttk.Label(tab_norm, text="Known terms (comma-separated):").pack(anchor="w", pady=(8, 0))
-        self._terms_var = tk.StringVar(
-            value=", ".join(self._config.normalization.known_terms)
-        )
-        ttk.Entry(tab_norm, textvariable=self._terms_var, width=55).pack(fill="x", pady=4)
-
-        # --- Tab 5: Telemetry ---
+        # --- Tab 4: Telemetry ---
         tab_tel = ttk.Frame(notebook, padding=12)
         notebook.add(tab_tel, text=f"  {t('settings.tab_telemetry')}  ")
 
@@ -382,13 +396,13 @@ class SettingsWindow:
                 self._ptt_var.set(self._config.ptt_key)
             else:
                 self._ptt_var.set("+".join(keys))
-            self._ptt_record_btn.config(text="Record...", state="normal")
+            self._ptt_record_btn.config(text=t("settings.record_btn"), state="normal")
         else:
             if cancelled or not keys:
                 self._hotkey_var.set(self._config.hotkey)
             else:
                 self._hotkey_var.set("+".join(keys))
-            self._record_btn.config(text="Record...", state="normal")
+            self._record_btn.config(text=t("settings.record_btn"), state="normal")
 
     @staticmethod
     def _normalize_kb_name(name: str) -> str:
@@ -418,12 +432,13 @@ class SettingsWindow:
         self._config.groq.api_key = self._api_key_var.get().strip()
         self._config.groq.stt_model = self._stt_model_var.get().strip()
         self._config.groq.llm_model = self._llm_model_var.get().strip()
-        lang = self._language_var.get().strip()
-        self._config.groq.stt_language = None if lang == "auto" else lang
+        # Languages: comma-separated selected codes, or None for auto
+        selected_langs = [code for code, var in self._lang_vars.items() if var.get()]
+        self._config.groq.stt_language = ",".join(selected_langs) if selected_langs else None
 
         # Audio
         mic_str = self._mic_var.get()
-        if mic_str == "Auto (loudest)":
+        if mic_str == t("settings.mic_auto"):
             self._config.audio.mic_device_index = None
         else:
             try:
@@ -451,13 +466,6 @@ class SettingsWindow:
         # Autostart
         _set_autostart(self._autostart_var.get())
 
-        # Normalization
-        self._config.normalization.prompt = self._prompt_text.get("1.0", "end").strip()
-        terms_str = self._terms_var.get().strip()
-        self._config.normalization.known_terms = [
-            t.strip() for t in terms_str.split(",") if t.strip()
-        ]
-
         # Write YAML
         self._write_config()
 
@@ -467,8 +475,13 @@ class SettingsWindow:
         if self._on_save:
             self._on_save()
 
-        messagebox.showinfo("Groq Dictation", "Settings saved! Restart app for hotkey changes.")
         self._window.destroy()
+        restart = messagebox.askyesno(
+            "Groq Dictation",
+            t("settings.restart_prompt"),
+        )
+        if restart and self._on_save:
+            self._on_save(restart=True)
 
     def _write_config(self) -> None:
         """Write current config to config.yaml."""

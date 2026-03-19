@@ -122,7 +122,17 @@ The app maintains a user profile at `%APPDATA%\GroqDictation\user_profile.md`.
 └── ## Compiled Prompt — tournament-winning system prompt
 ```
 
-### How learning works
+### How to teach the app
+
+1. **Dictate** — hold the hotkey, speak, release
+2. **Review** — the app types the text into your active window
+3. **Edit** — if the app made mistakes, correct them manually (fix wrong words, spelling, etc.)
+4. **Double-tap** — quickly tap the hotkey **twice** (each tap < 0.5s, gap < 0.5s)
+5. **Confirmation** — you'll see a tray notification "Correction saved"
+
+The app compares what it typed vs what you changed, extracts correction pairs, and updates its profile. Over time, it stops making the same mistakes.
+
+### How learning works internally
 
 1. **Auto-diff** — after each session, diffs raw Whisper output vs LLM normalized text → learns Whisper error patterns
 2. **Feedback** — user edits text, double-taps → diffs normalized vs user-edited → learns user preferences
@@ -265,7 +275,17 @@ Groq надає **безкоштовний API** для розпізнаванн
 
 Додаток веде профіль користувача у `%APPDATA%\GroqDictation\user_profile.md`.
 
-### Як працює навчання
+### Як навчити додаток
+
+1. **Диктуйте** — утримуйте гарячу клавішу, говоріть, відпустіть
+2. **Перегляньте** — додаток введе текст у активне вікно
+3. **Відредагуйте** — якщо є помилки, виправте їх вручну
+4. **Подвійний тап** — швидко натисніть гарячу клавішу **двічі** (кожен тап < 0,5 с, пауза < 0,5 с)
+5. **Підтвердження** — ви побачите сповіщення "Виправлення збережено"
+
+Додаток порівняє те, що він набрав, з тим, що ви змінили, виділить пари виправлень і оновить профіль. З часом він перестане робити ті самі помилки.
+
+### Як працює навчання всередині
 
 1. **Авто-diff** — після кожної сесії порівнює вихід Whisper з нормалізованим текстом LLM → вивчає патерни помилок
 2. **Зворотній зв'язок** — користувач редагує текст, робить подвійний тап → порівнює нормалізований з відредагованим → вивчає вподобання

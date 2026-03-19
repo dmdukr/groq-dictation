@@ -121,8 +121,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uk": "LLM Модель:",
     },
     "settings.language": {
-        "en": "Language:",
-        "uk": "Мова:",
+        "en": "Languages:",
+        "uk": "Мови:",
+    },
+    "settings.language_hint": {
+        "en": "Select none for auto-detect, or choose languages to restrict recognition",
+        "uk": "Не обирайте жодної для автовизначення, або оберіть мови для обмеження розпізнавання",
     },
     "settings.hotkey": {
         "en": "Hotkey:",
@@ -152,6 +156,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Settings saved. Restart to apply.",
         "uk": "Налаштування збережено. Перезапустіть для застосування.",
     },
+    "settings.restart_prompt": {
+        "en": "Settings saved. Restart now to apply changes?",
+        "uk": "Налаштування збережено. Перезапустити зараз для застосування?",
+    },
     "settings.ui_language": {
         "en": "UI Language:",
         "uk": "Мова інтерфейсу:",
@@ -173,12 +181,106 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uk": "Надсилати анонімну статистику для покращення розпізнавання",
     },
     "settings.telemetry_hint": {
-        "en": "Only counters and model names are sent. No text, audio, or personal data.",
-        "uk": "Надсилаються лише лічильники та назви моделей. Без тексту, аудіо чи особистих даних.",
+        "en": "Sent: session counts, latency, model names, hallucination rates, crash logs, and recognition triads (raw/normalized/edited text). No audio or API keys.",
+        "uk": "Надсилається: кількість сесій, затримки, назви моделей, частота галюцинацій, логи збоїв та тріади розпізнавання (розпізнано/нормалізовано/виправлено). Без аудіо та API ключів.",
     },
     "settings.autostart": {
         "en": "Start with Windows",
         "uk": "Запускати з Windows",
+    },
+    "settings.show_key": {
+        "en": "Show key",
+        "uk": "Показати ключ",
+    },
+    "settings.mic_device": {
+        "en": "Microphone:",
+        "uk": "Мікрофон:",
+    },
+    "settings.mic_auto": {
+        "en": "Auto (loudest)",
+        "uk": "Авто (найгучніший)",
+    },
+    "settings.noise_filter": {
+        "en": "Noise filter:",
+        "uk": "Фільтр шуму:",
+    },
+    "settings.vad_0": {
+        "en": "All sounds (noisy rooms)",
+        "uk": "Усі звуки (шумні кімнати)",
+    },
+    "settings.vad_1": {
+        "en": "Soft filter",
+        "uk": "М'який фільтр",
+    },
+    "settings.vad_2": {
+        "en": "Balanced (recommended)",
+        "uk": "Збалансований (рекомендовано)",
+    },
+    "settings.vad_3": {
+        "en": "Strict (only clear speech)",
+        "uk": "Суворий (тільки чіткий голос)",
+    },
+    "settings.pause_to_split": {
+        "en": "Pause to split:",
+        "uk": "Пауза для розділення:",
+    },
+    "settings.pause_hint": {
+        "en": "How long to wait in silence before sending audio for recognition",
+        "uk": "Скільки чекати тиші перед відправкою аудіо на розпізнавання",
+    },
+    "settings.hotkey_label": {
+        "en": "Hotkey:",
+        "uk": "Гаряча клавіша:",
+    },
+    "settings.record_btn": {
+        "en": "Record...",
+        "uk": "Записати...",
+    },
+    "settings.recording_mode": {
+        "en": "Recording mode:",
+        "uk": "Режим запису:",
+    },
+    "settings.mode_toggle": {
+        "en": "Toggle: press to start, press again to stop",
+        "uk": "Перемикач: натисніть для старту, ще раз для зупинки",
+    },
+    "settings.mode_hold": {
+        "en": "Hold: record while key is held down",
+        "uk": "Утримання: запис поки клавіша натиснута",
+    },
+    "settings.hold_key": {
+        "en": "Hold key:",
+        "uk": "Клавіша утримання:",
+    },
+    "settings.hold_hint": {
+        "en": "Key to hold for push-to-talk (only in Hold mode)",
+        "uk": "Клавіша для утримання (тільки в режимі Утримання)",
+    },
+    "settings.normalize_check": {
+        "en": "Enable LLM normalization after dictation",
+        "uk": "Увімкнути LLM-нормалізацію після диктування",
+    },
+    "settings.beep_start": {
+        "en": "Beep on recording start",
+        "uk": "Звук на початку запису",
+    },
+    "settings.beep_stop": {
+        "en": "Beep on recording stop",
+        "uk": "Звук при зупинці запису",
+    },
+    "settings.show_notif": {
+        "en": "Show tray notifications",
+        "uk": "Показувати сповіщення в треї",
+    },
+    "settings.tab_dictation": {
+        "en": "Dictation",
+        "uk": "Диктування",
+    },
+    "settings.feedback_hint": {
+        "en": "Self-learning: after dictation, edit the text manually, then double-tap the hotkey. "
+              "The app will compare your edits with its output and learn from the corrections.",
+        "uk": "Самонавчання: після диктування відредагуйте текст вручну, потім двічі натисніть гарячу клавішу. "
+              "Додаток порівняє ваші правки зі своїм результатом і навчиться на виправленнях.",
     },
 
     # ── Overlay ──────────────────────────────────────────────────

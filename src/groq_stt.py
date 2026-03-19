@@ -125,13 +125,39 @@ class GroqSTT:
         prompt_parts = []
         if previous_text:
             prompt_parts.append(previous_text[-100:].strip())
-        if not self._config.stt_language:
-            prompt_parts.append("Говоріть будь ласка.")
-        prompt = " ".join(prompt_parts)
 
+        # Language handling
         kwargs: dict = {}
-        if self._config.stt_language and self._config.stt_language != "auto":
-            kwargs["language"] = self._config.stt_language
+        lang = self._config.stt_language or ""
+
+        if "," in lang:
+            # Multiple languages selected
+            lang_codes = [l.strip() for l in lang.split(",") if l.strip()]
+            # Map codes to language names for Whisper prompt
+            lang_names = {
+                "uk": "Українська", "ru": "Русский", "en": "English",
+                "de": "Deutsch", "fr": "Français", "es": "Español",
+                "pl": "Polski", "it": "Italiano", "pt": "Português",
+                "nl": "Nederlands", "tr": "Türkçe", "cs": "Čeština",
+                "ja": "日本語", "zh": "中文", "ko": "한국어",
+            }
+            # Set primary language for API — uk preferred if in list
+            # (Whisper with uk still transcribes Russian and English fine)
+            if "uk" in lang_codes:
+                kwargs["language"] = "uk"
+            else:
+                kwargs["language"] = lang_codes[0]
+            # Add all language names as prompt context
+            names = [lang_names.get(c, c) for c in lang_codes]
+            prompt_parts.append(", ".join(names) + ".")
+        elif lang and lang != "auto":
+            # Single language — pass directly to API
+            kwargs["language"] = lang
+        else:
+            # Auto-detect — add generic prompt
+            prompt_parts.append("Говоріть будь ласка.")
+
+        prompt = " ".join(prompt_parts)
 
         response = self._call_api_with_retry(wav_bytes, prompt, kwargs)
         if response is None:

@@ -2,7 +2,7 @@ groq:
   api_key: ''
   stt_model: whisper-large-v3-turbo
   llm_model: llama-3.3-70b-versatile
-  stt_language: null
+  stt_language: uk,ru,en
   stt_temperature: 0.0
 audio:
   mic_device_index: null
@@ -38,10 +38,13 @@ text_injection:
   method: sendinput
   typing_delay_ms: 5
   backspace_batch_size: 50
+telemetry:
+  enabled: true
 ui:
   show_notifications: true
   sound_on_start: true
   sound_on_stop: true
+  language: uk
 logging:
   level: INFO
   file: groq-dictation.log
