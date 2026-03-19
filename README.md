@@ -251,3 +251,36 @@ python -m src.main
 | **Версія Windows** | Налаштування → Система → Про систему |
 | **Логи** | `%APPDATA%\GroqDictation\logs\groq-dictation.log` |
 | **Профіль** | `%APPDATA%\GroqDictation\user_profile.md` |
+
+---
+
+## Privacy Policy
+
+Groq Dictation collects **anonymous usage statistics** to improve the application. This can be disabled in Settings → Telemetry.
+
+### What is collected
+- Session count, audio duration, latency (aggregated numbers only)
+- STT/LLM model names used
+- Hallucination filter hit rates
+- App version, OS version
+
+### What is NOT collected
+- No speech audio
+- No transcribed text
+- No API keys or credentials
+- No personal information
+- No IP addresses (Amplitude handles anonymization)
+
+### Data destination
+Anonymous events are sent to [Amplitude](https://amplitude.com) analytics. No data is sold or shared with third parties.
+
+### Opt-out
+Disable telemetry in Settings → Telemetry tab, or set `telemetry.enabled: false` in `config.yaml`.
+
+---
+
+## License
+
+[MIT License](LICENSE) — Copyright (c) 2026 Dmytro Dubinko
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org)

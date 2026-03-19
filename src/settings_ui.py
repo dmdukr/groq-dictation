@@ -104,10 +104,10 @@ class SettingsWindow:
         ).grid(row=1, column=1, sticky="w", padx=(8, 0))
 
         # API key hint
-        hint_label = tk.Label(
+        hint_label = ttk.Label(
             tab_api, text=t("settings.api_hint"),
-            fg="#888888", bg=tab_api.cget("background") if tab_api.cget("background") != "SystemButtonFace" else None,
-            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
+            foreground="#888888",
+            font=("Segoe UI", 8), wraplength=400,
         )
         hint_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
@@ -276,9 +276,9 @@ class SettingsWindow:
             variable=self._telemetry_var,
         ).grid(row=0, column=0, sticky="w", pady=(4, 0))
 
-        tk.Label(
+        ttk.Label(
             tab_tel, text=t("settings.telemetry_hint"),
-            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left",
+            foreground="#888888", font=("Segoe UI", 8),
             wraplength=450,
         ).grid(row=1, column=0, sticky="w", pady=(2, 12))
 
