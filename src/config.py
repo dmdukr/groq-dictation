@@ -95,9 +95,9 @@ class LoggingConfig:
 class AppConfig:
     groq: GroqConfig = field(default_factory=GroqConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
-    hotkey: str = "ctrl+shift+d"
-    hotkey_mode: str = "toggle"  # "toggle" = press on/off, "hold" = record while held
-    ptt_key: str = "ctrl"  # push-to-talk key (used in "hold" mode)
+    hotkey: str = "f12"
+    hotkey_mode: str = "hold"  # "toggle" = press on/off, "hold" = record while held
+    ptt_key: str = "f12"  # push-to-talk key (used in "hold" mode)
     normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
     profile: ProfileConfig = field(default_factory=ProfileConfig)
     text_injection: TextInjectionConfig = field(default_factory=TextInjectionConfig)

@@ -70,7 +70,7 @@ Right-click the tray icon → **Settings** to open the configuration window.
 | `groq.api_key` | Groq API key ([get one free](https://console.groq.com)) | — |
 | `groq.stt_model` | Whisper model | `whisper-large-v3-turbo` |
 | `groq.llm_model` | LLM for normalization | `llama-3.3-70b-versatile` |
-| `audio.hold_hotkey` | Hold-to-record hotkey | `alt gr` |
+| `hotkey` | Hold-to-record hotkey | `f12` |
 | `audio.mic_device_index` | Microphone device index (null = auto) | `null` |
 | `normalization.enabled` | Enable AI post-processing | `true` |
 
@@ -78,7 +78,7 @@ Right-click the tray icon → **Settings** to open the configuration window.
 
 | Action | How |
 |--------|-----|
-| **Record** | Hold the hotkey (default: `Alt Gr`) — speak — release |
+| **Record** | Hold the hotkey (default: `F12`) — speak — release |
 | **Feedback** | After text is typed, edit it, then double-tap the hotkey |
 | **Settings** | Right-click tray icon → Settings |
 | **Profile** | Right-click tray icon → Open Profile |
@@ -281,6 +281,6 @@ Disable telemetry in Settings → Telemetry tab, or set `telemetry.enabled: fals
 
 ## License
 
-[MIT License](LICENSE) — Copyright (c) 2026 Dmytro Dubinko
+[GNU GPL v3](LICENSE) — Copyright (c) 2026 Dmytro Dubinko
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org)
