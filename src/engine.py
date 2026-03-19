@@ -562,28 +562,11 @@ class DictationEngine:
         threading.Thread(target=_do_flash, name="IconFlash", daemon=True).start()
 
     def _maybe_optimize_prompt(self) -> None:
-        """Trigger prompt optimization if profile has new data."""
+        """Recompile prompt from profile facts (instant, no LLM calls)."""
         if not self._profile or not self._profile.needs_recompile:
             return
-        if not self._stt:
-            return
-
-        def _do_optimize():
-            try:
-                import httpx
-                http = httpx.Client(
-                    base_url="https://api.groq.com/openai/v1",
-                    headers={"Authorization": f"Bearer {self._config.groq.api_key}"},
-                    timeout=30.0,
-                )
-                self._profile.optimize_prompt(http)
-                http.close()
-                self._profile._needs_recompile = False
-                logger.info("Prompt optimization complete")
-            except Exception as e:
-                logger.warning("Prompt optimization failed: %s", e)
-
-        threading.Thread(target=_do_optimize, name="PromptOpt", daemon=True).start()
+        self._profile.compile_prompt()
+        logger.info("Prompt recompiled from facts")
 
     def _reset(self) -> None:
         """Reset engine to IDLE state."""

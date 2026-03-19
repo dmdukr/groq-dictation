@@ -642,27 +642,24 @@ class UserProfile:
     # ── Prompt Generation ────────────────────────────────────────────
 
     def get_prompt_context(self) -> str:
-        """Return compiled prompt if available, else build from raw facts."""
+        """Build prompt context from profile facts. Max ~500 chars for fast LLM processing."""
         if not self._enabled:
             return ""
-
-        with self._lock:
-            compiled = self._data.get("compiled_prompt", "")
-            if compiled:
-                return compiled
-
-        # Fallback: build from raw facts (before first optimization)
         return self._build_facts_summary()
 
-    def _build_facts_summary(self) -> str:
-        """Build raw facts summary for prompt injection (fallback before optimization)."""
+    def compile_prompt(self) -> None:
+        """Recompile prompt from facts (no LLM needed). Called after each profile update."""
+        # Just rebuild from facts — deterministic, instant, no API calls
+        self._needs_recompile = False
+        self.save()
+
+    def _build_facts_summary(self, max_chars: int = 500) -> str:
+        """Build compact prompt from profile facts, fitting within max_chars budget."""
+        budget = max_chars
         parts = []
 
         with self._lock:
-            rules = self._data.get("rules", [])
-            if rules:
-                parts.append("RULES:\n" + "\n".join(f"- {r}" for r in rules))
-
+            # 1. User preferences (highest priority — from feedback)
             corrections = self._data.get("corrections", {})
             user_prefs = []
             auto_fixes = []
@@ -672,44 +669,76 @@ class UserProfile:
                 kv = key.split("|", 1)
                 if len(kv) != 2:
                     continue
-                if source == "feedback" or count >= self._min_correction_count:
-                    pair = f'"{kv[0]}"→"{kv[1]}"'
-                    if source == "feedback":
-                        user_prefs.append(pair)
-                    else:
-                        auto_fixes.append(pair)
+                if source == "feedback":
+                    user_prefs.append(f'"{kv[0]}"→"{kv[1]}"')
+                elif count >= self._min_correction_count:
+                    auto_fixes.append(f'"{kv[0]}"→"{kv[1]}"')
 
+            # Add user prefs first (highest priority), fitting within budget
             if user_prefs:
-                parts.append(
-                    "USER PREFERENCES (ALWAYS apply):\n" + ", ".join(user_prefs)
-                )
-            if auto_fixes:
-                parts.append(
-                    "WHISPER ERRORS:\n" + ", ".join(auto_fixes[:15])
-                )
+                section = "USER FIXES: "
+                items = []
+                for p in user_prefs:
+                    candidate = section + ", ".join(items + [p])
+                    if len(candidate) > budget:
+                        break
+                    items.append(p)
+                if items:
+                    line = section + ", ".join(items)
+                    parts.append(line)
+                    budget -= len(line) + 1
 
-            vocab = self._data.get("vocabulary", {})
-            nouns = self._data.get("proper_nouns", {})
-            all_terms: list[tuple[str, int]] = []
-            for word, entry in vocab.items():
-                all_terms.append((word, entry.get("count", 0)))
-            for noun, entry in nouns.items():
-                all_terms.append((noun, entry.get("count", 0)))
-            all_terms.sort(key=lambda x: x[1], reverse=True)
-            seen: set[str] = set()
-            unique: list[str] = []
-            for term, _ in all_terms:
-                if term.lower() not in seen:
+            # Add whisper fixes within remaining budget
+            if auto_fixes and budget > 30:
+                section = "WHISPER FIXES: "
+                items = []
+                for p in auto_fixes:
+                    candidate = section + ", ".join(items + [p])
+                    if len(candidate) > budget:
+                        break
+                    items.append(p)
+                if items:
+                    line = section + ", ".join(items)
+                    parts.append(line)
+                    budget -= len(line) + 1
+
+            # 2. Rules within remaining budget
+            rules = self._data.get("rules", [])
+            if rules and budget > 20:
+                section = "RULES: "
+                items = []
+                for r in rules:
+                    candidate = section + "; ".join(items + [r])
+                    if len(candidate) > budget:
+                        break
+                    items.append(r)
+                if items:
+                    line = section + "; ".join(items)
+                    parts.append(line)
+                    budget -= len(line) + 1
+
+            # 3. Top terms within remaining budget
+            if budget > 20:
+                vocab = self._data.get("vocabulary", {})
+                nouns = self._data.get("proper_nouns", {})
+                all_terms = [(w, e.get("count", 0)) for w, e in vocab.items()]
+                all_terms += [(n, e.get("count", 0)) for n, e in nouns.items()]
+                all_terms.sort(key=lambda x: x[1], reverse=True)
+                seen: set[str] = set()
+                section = "TERMS: "
+                items = []
+                for term, _ in all_terms:
+                    if term.lower() in seen:
+                        continue
                     seen.add(term.lower())
-                    unique.append(term)
-                if len(unique) >= 25:
-                    break
-            if unique:
-                parts.append(
-                    "FREQUENT TERMS: " + ", ".join(unique)
-                )
+                    candidate = section + ", ".join(items + [term])
+                    if len(candidate) > budget:
+                        break
+                    items.append(term)
+                if items:
+                    parts.append(section + ", ".join(items))
 
-        return "\n\n".join(parts)
+        return "\n".join(parts)
 
     # ── Prompt Optimizer (Tournament) ────────────────────────────────
 
