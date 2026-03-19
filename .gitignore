@@ -14,3 +14,5 @@ installer_output/
 norm_test.txt
 result*.txt
 *.wav
+=1.2.0
+GroqDictation.spec

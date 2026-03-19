@@ -7,7 +7,7 @@ from pathlib import Path
 block_cipher = None
 
 a = Analysis(
-    ['src/main.py'],
+    ['run.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -48,7 +48,7 @@ a = Analysis(
         'numpy',
         'scipy',
         'pandas',
-        'tkinter',
+        # 'tkinter',  # needed by overlay and settings_ui
         'unittest',
         'test',
         'xmlrpc',

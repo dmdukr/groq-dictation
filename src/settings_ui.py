@@ -65,24 +65,32 @@ class SettingsWindow:
             command=lambda: api_entry.config(show="" if self._show_key_var.get() else "*"),
         ).grid(row=1, column=1, sticky="w", padx=(8, 0))
 
-        ttk.Label(tab_api, text=t("settings.stt_model")).grid(row=2, column=0, sticky="w", pady=4)
+        # API key hint
+        hint_label = tk.Label(
+            tab_api, text=t("settings.api_hint"),
+            fg="#888888", bg=tab_api.cget("background") if tab_api.cget("background") != "SystemButtonFace" else None,
+            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
+        )
+        hint_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+        ttk.Label(tab_api, text=t("settings.stt_model")).grid(row=3, column=0, sticky="w", pady=4)
         self._stt_model_var = tk.StringVar(master=self._window, value=self._config.groq.stt_model)
         stt_combo = ttk.Combobox(tab_api, textvariable=self._stt_model_var, width=35, values=[
             "whisper-large-v3-turbo",
             "whisper-large-v3",
         ])
-        stt_combo.grid(row=2, column=1, sticky="w", pady=4, padx=(8, 0))
+        stt_combo.grid(row=3, column=1, sticky="w", pady=4, padx=(8, 0))
 
-        ttk.Label(tab_api, text=t("settings.llm_model")).grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(tab_api, text=t("settings.llm_model")).grid(row=4, column=0, sticky="w", pady=4)
         self._llm_model_var = tk.StringVar(master=self._window, value=self._config.groq.llm_model)
         llm_combo = ttk.Combobox(tab_api, textvariable=self._llm_model_var, width=35, values=[
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
             "gemma2-9b-it",
         ])
-        llm_combo.grid(row=3, column=1, sticky="w", pady=4, padx=(8, 0))
+        llm_combo.grid(row=4, column=1, sticky="w", pady=4, padx=(8, 0))
 
-        ttk.Label(tab_api, text=t("settings.language")).grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(tab_api, text=t("settings.language")).grid(row=5, column=0, sticky="w", pady=4)
         self._language_var = tk.StringVar(
             value=self._config.groq.stt_language or "auto"
         )
@@ -213,6 +221,26 @@ class SettingsWindow:
             value=", ".join(self._config.normalization.known_terms)
         )
         ttk.Entry(tab_norm, textvariable=self._terms_var, width=55).pack(fill="x", pady=4)
+
+        # --- Tab 5: Telemetry ---
+        tab_tel = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_tel, text=f"  {t('settings.tab_telemetry')}  ")
+
+        self._telemetry_var = tk.BooleanVar(
+            master=self._window, value=self._config.telemetry.enabled
+        )
+        ttk.Checkbutton(
+            tab_tel, text=t("settings.telemetry_enabled"),
+            variable=self._telemetry_var,
+        ).grid(row=0, column=0, sticky="w", pady=(4, 0))
+
+        tk.Label(
+            tab_tel, text=t("settings.telemetry_hint"),
+            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left",
+            wraplength=450,
+        ).grid(row=1, column=0, sticky="w", pady=(2, 12))
+
+        tab_tel.columnconfigure(0, weight=1)
 
         # --- Buttons ---
         btn_frame = ttk.Frame(self._window)
@@ -375,6 +403,9 @@ class SettingsWindow:
         self._config.ui.show_notifications = self._notif_var.get()
         self._config.ui.language = self._ui_lang_var.get()
 
+        # Telemetry
+        self._config.telemetry.enabled = self._telemetry_var.get()
+
         # Normalization
         self._config.normalization.prompt = self._prompt_text.get("1.0", "end").strip()
         terms_str = self._terms_var.get().strip()
@@ -427,6 +458,9 @@ class SettingsWindow:
                 "method": self._config.text_injection.method,
                 "typing_delay_ms": self._config.text_injection.typing_delay_ms,
                 "backspace_batch_size": self._config.text_injection.backspace_batch_size,
+            },
+            "telemetry": {
+                "enabled": self._config.telemetry.enabled,
             },
             "ui": {
                 "show_notifications": self._config.ui.show_notifications,

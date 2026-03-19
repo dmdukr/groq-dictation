@@ -71,6 +71,11 @@ class TextInjectionConfig:
 
 
 @dataclass
+class TelemetryConfig:
+    enabled: bool = True  # send anonymous stats to improve recognition
+
+
+@dataclass
 class UIConfig:
     show_notifications: bool = True
     sound_on_start: bool = True
@@ -96,6 +101,7 @@ class AppConfig:
     normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
     profile: ProfileConfig = field(default_factory=ProfileConfig)
     text_injection: TextInjectionConfig = field(default_factory=TextInjectionConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -194,6 +200,11 @@ class AppConfig:
                 self.text_injection.typing_delay_ms = t["typing_delay_ms"]
             if "backspace_batch_size" in t:
                 self.text_injection.backspace_batch_size = t["backspace_batch_size"]
+
+        if "telemetry" in data:
+            tel = data["telemetry"]
+            if "enabled" in tel:
+                self.telemetry.enabled = tel["enabled"]
 
         if "ui" in data:
             u = data["ui"]

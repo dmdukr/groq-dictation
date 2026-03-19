@@ -108,6 +108,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "API Key:",
         "uk": "API Ключ:",
     },
+    "settings.api_hint": {
+        "en": "1. Go to console.groq.com  2. Sign up / Log in  3. API Keys → Create  4. Copy and paste here",
+        "uk": "1. Відкрийте console.groq.com  2. Зареєструйтесь  3. API Keys → Create  4. Скопіюйте сюди",
+    },
     "settings.stt_model": {
         "en": "STT Model:",
         "uk": "STT Модель:",
@@ -159,6 +163,18 @@ _STRINGS: dict[str, dict[str, str]] = {
     "settings.profile_path": {
         "en": "Profile:",
         "uk": "Профіль:",
+    },
+    "settings.tab_telemetry": {
+        "en": "Telemetry",
+        "uk": "Телеметрія",
+    },
+    "settings.telemetry_enabled": {
+        "en": "Send anonymous statistics to improve speech recognition",
+        "uk": "Надсилати анонімну статистику для покращення розпізнавання",
+    },
+    "settings.telemetry_hint": {
+        "en": "Only counters and model names are sent. No text, audio, or personal data.",
+        "uk": "Надсилаються лише лічильники та назви моделей. Без тексту, аудіо чи особистих даних.",
     },
 
     # ── Overlay ──────────────────────────────────────────────────

@@ -401,6 +401,27 @@ class AudioCapture:
         except Exception:
             return f"Device {self._device_index}"
 
+    def detect_new_headset(self, known_device_names: set[str]) -> AudioDevice | None:
+        """Check if a new external mic appeared that wasn't in known_device_names.
+
+        Returns the new external device, or None.
+        """
+        try:
+            devices = self.list_devices()
+            for dev in devices:
+                if dev.name not in known_device_names and self._is_external_mic(dev):
+                    return dev
+        except Exception:
+            pass
+        return None
+
+    def get_known_device_names(self) -> set[str]:
+        """Return names of all currently visible input devices."""
+        try:
+            return {dev.name for dev in self.list_devices()}
+        except Exception:
+            return set()
+
     def terminate(self) -> None:
         """Release all PyAudio resources.
 
@@ -512,36 +533,72 @@ class AudioCapture:
         return (None, pyaudio.paContinue)
 
     def _auto_select_loudest(self) -> AudioDevice | None:
-        """Probe every input device briefly and pick the one with highest RMS.
+        """Select the best input device using priority-based logic.
+
+        Priority order:
+          1. Headset / Bluetooth / USB microphones (external devices)
+          2. Built-in microphone arrays (fallback)
+
+        Within each priority group, picks the device with highest RMS.
 
         Returns
         -------
         AudioDevice | None
-            The loudest device, or ``None`` if no device could be probed.
+            The best device, or ``None`` if no device could be probed.
         """
         pa = self._ensure_pa()
         devices = self.list_devices()
         if not devices:
             return None
 
-        best_device: AudioDevice | None = None
-        best_rms: float = -1.0
-
         probe_frames = max(
             1,
             int(self._config.sample_rate * _PROBE_DURATION_S / self._frame_samples),
         )
 
+        # Classify devices into priority groups
+        external: list[tuple[AudioDevice, float]] = []
+        builtin: list[tuple[AudioDevice, float]] = []
+
         for dev in devices:
             rms = self._probe_device_rms(pa, dev, probe_frames)
             if rms is None:
                 continue
-            logger.debug("Device %d (%s): RMS=%.1f", dev.index, dev.name, rms)
-            if rms > best_rms:
-                best_rms = rms
-                best_device = dev
+            logger.info("Device %d (%s): RMS=%.1f, type=%s",
+                        dev.index, dev.name, rms,
+                        "external" if self._is_external_mic(dev) else "builtin")
+            if self._is_external_mic(dev):
+                external.append((dev, rms))
+            else:
+                builtin.append((dev, rms))
 
-        return best_device
+        # Prefer external devices; within group pick loudest
+        for group in (external, builtin):
+            if group:
+                group.sort(key=lambda x: x[1], reverse=True)
+                return group[0][0]
+
+        return None
+
+    @staticmethod
+    def _is_external_mic(dev: AudioDevice) -> bool:
+        """Check if a device is an external mic (headset, bluetooth, USB)."""
+        name_lower = dev.name.lower()
+        external_keywords = [
+            "headset", "bluetooth", "usb", "airpods", "buds",
+            "jabra", "plantronics", "corsair", "hyperx", "razer",
+            "steelseries", "logitech",
+        ]
+        builtin_keywords = [
+            "microphone array", "realtek", "internal", "built-in",
+            "pc speaker",
+        ]
+        if any(kw in name_lower for kw in external_keywords):
+            return True
+        if any(kw in name_lower for kw in builtin_keywords):
+            return False
+        # Unknown device — treat as external (safer default)
+        return True
 
     def _probe_device_rms(
         self,

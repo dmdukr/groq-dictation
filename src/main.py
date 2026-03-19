@@ -108,6 +108,9 @@ def main() -> None:
     # Create engine
     engine = DictationEngine(config)
 
+    # Telemetry: app start
+    engine._telemetry.app_start()
+
     # Create and run tray app (blocks main thread)
     tray = TrayApp(engine, config)
 
@@ -120,6 +123,7 @@ def main() -> None:
         logger.critical(f"Fatal error: {e}", exc_info=True)
         sys.exit(1)
     finally:
+        engine._telemetry.app_stop()
         engine.shutdown()
         logger.info("Groq Dictation stopped")
 

@@ -16,6 +16,7 @@ from .normalizer import Normalizer
 from .text_injector import TextInjector
 from .recording_overlay import RecordingOverlay
 from .user_profile import UserProfile
+from .telemetry import TelemetryCollector
 # from .window_context import get_window_context  # disabled: comtypes COM crashes process
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class DictationEngine:
         self._normalizer = Normalizer(config.groq, config.normalization, profile=self._profile)
         self._injector = TextInjector(config.text_injection)
         self._overlay = RecordingOverlay()
+        self._telemetry = TelemetryCollector(enabled=config.telemetry.enabled)
         self._viz_queue: queue.Queue[bytes] | None = None
 
         # Pre-init STT client (so first recording is fast)
@@ -448,6 +450,15 @@ class DictationEngine:
                     self._maybe_optimize_prompt()
                 except Exception as e:
                     logger.warning(f"Profile update failed: {e}")
+            # Telemetry
+            duration = time.monotonic() - self._recording_start_time if hasattr(self, "_recording_start_time") else 0
+            self._telemetry.record_session(
+                audio_duration_s=duration,
+                latency_ms=(time.monotonic() - self._recording_start_time) * 1000 if hasattr(self, "_recording_start_time") else 0,
+                stt_model=self._config.groq.stt_model,
+                llm_model=self._config.groq.llm_model,
+                char_count=len(normalized_text),
+            )
             self._set_state(DictationState.IDLE)
         except Exception as e:
             logger.error(f"Error during text replacement: {e}")
@@ -497,6 +508,7 @@ class DictationEngine:
                 logger.info("Feedback corrections recorded to profile")
                 self._maybe_optimize_prompt()
 
+            self._telemetry.record_feedback(corrections_count=1)
             self._flash_icon("success")
 
         except Exception as e:
