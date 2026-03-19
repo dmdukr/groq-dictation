@@ -511,9 +511,14 @@ class TrayApp:
             self._icon.stop()
 
     def _on_quit_click(self, _icon=None, _item=None) -> None:
-        """Quit the application."""
+        """Quit the application — full process exit."""
         logger.info("Quitting application")
+        self._updater.stop()
+        self._engine._telemetry.app_stop()
         self._engine.shutdown()
         keyboard.unhook_all()
         if self._icon:
             self._icon.stop()
+        # Force exit to ensure all threads are killed
+        import os
+        os._exit(0)
