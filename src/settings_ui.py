@@ -533,17 +533,22 @@ class SettingsWindow:
                 "backup_count": self._config.logging.backup_count,
             },
         }
+        from .config import APP_DIR
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        save_path = APP_DIR / "config.yaml"
         try:
-            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            with open(save_path, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-            logger.info(f"Config saved to {CONFIG_PATH}")
+            logger.info(f"Config saved to {save_path}")
         except Exception as e:
             logger.error(f"Failed to save config: {e}")
             messagebox.showerror("Error", f"Failed to save config: {e}")
 
     def _write_env(self) -> None:
-        """Write API key to .env file."""
-        env_path = Path(__file__).parent.parent / ".env"
+        """Write API key to .env file in APPDATA (works for both source and exe)."""
+        from .config import APP_DIR
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        env_path = APP_DIR / ".env"
         try:
             with open(env_path, "w", encoding="utf-8") as f:
                 f.write(f"GROQ_API_KEY={self._config.groq.api_key}\n")

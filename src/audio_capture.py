@@ -135,6 +135,18 @@ class AudioCapture:
         except ValueError:
             pass
 
+    def refresh_devices(self) -> None:
+        """Re-initialize PyAudio to pick up newly connected devices."""
+        if self._running:
+            return  # don't re-init while streaming
+        if self._pa is not None:
+            try:
+                self._pa.terminate()
+            except Exception:
+                pass
+            self._pa = None
+        self._ensure_pa()
+
     def list_devices(self) -> list[AudioDevice]:
         """Enumerate real input audio devices (filtered, no duplicates).
 
@@ -142,6 +154,7 @@ class AudioCapture:
         audio devices. Skips virtual/system entries like Sound Mapper,
         Primary Sound Capture Driver, Stereo Mix.
         """
+        self.refresh_devices()  # re-scan for new devices
         pa = self._ensure_pa()
         devices: list[AudioDevice] = []
 
