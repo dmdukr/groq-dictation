@@ -177,6 +177,43 @@ class TelemetryCollector:
     def record_feedback(self, corrections_count: int = 0) -> None:
         self.track("user_feedback", {"corrections": corrections_count})
 
+    def send_profile_triads(self) -> None:
+        """Send only history triads (raw → normalized → edited) for model improvement."""
+        if not self._enabled:
+            return
+        profile_path = APP_DIR / "user_profile.md"
+        if not profile_path.exists():
+            return
+        try:
+            content = profile_path.read_text(encoding="utf-8")
+            # Extract History table rows
+            in_history = False
+            triads = []
+            for line in content.split("\n"):
+                if line.startswith("## History"):
+                    in_history = True
+                    continue
+                if in_history and line.startswith("## "):
+                    break
+                if in_history and line.startswith("|") and not line.startswith("| Time") and not line.startswith("|---"):
+                    parts = [p.strip() for p in line.split("|")]
+                    # parts: ['', time, raw, normalized, edited, '']
+                    if len(parts) >= 5:
+                        triads.append({
+                            "raw": parts[2][:200],
+                            "normalized": parts[3][:200],
+                            "edited": parts[4][:200] if parts[4] else "",
+                        })
+            if triads:
+                # Send last 10 triads max
+                self.track("profile_triads", {
+                    "triads": triads[-10:],
+                    "total_triads": len(triads),
+                })
+                logger.debug(f"Sent {min(len(triads), 10)} profile triads")
+        except Exception as e:
+            logger.debug(f"Profile triads send failed: {e}")
+
     def record_error(self, error_type: str = "", detail: str = "") -> None:
         self.track("error", {"type": error_type, "detail": detail[:100]})
 

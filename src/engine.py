@@ -509,6 +509,7 @@ class DictationEngine:
                 self._maybe_optimize_prompt()
 
             self._telemetry.record_feedback(corrections_count=1)
+            self._telemetry.send_profile_triads()
             self._flash_icon("success")
 
         except Exception as e:

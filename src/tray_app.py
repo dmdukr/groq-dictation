@@ -14,6 +14,7 @@ from pystray import Icon, Menu, MenuItem
 from .config import AppConfig
 from .engine import DictationEngine, DictationState
 from .i18n import t
+from .updater import Updater
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,10 @@ class TrayApp:
         self._engine.set_quota_callback(self._on_quota_warning)
         self._engine.set_suppress_ptt_callback(self._on_suppress_ptt)
 
+        # Auto-updater
+        self._updater = Updater(on_update_available=self._on_update_available)
+        self._pending_update: dict | None = None
+
     def run(self) -> None:
         """Run the tray app. Blocks the main thread."""
         self._icon = Icon(
@@ -128,6 +133,9 @@ class TrayApp:
             except Exception as e:
                 logger.warning(f"Mic pre-open failed: {e}")
         threading.Thread(target=_prewarm, daemon=True).start()
+
+        # Start auto-updater
+        self._updater.start()
 
     def _register_hotkeys(self) -> None:
         """Register hotkeys based on config mode."""
@@ -255,6 +263,10 @@ class TrayApp:
                 self._on_profile_click,
             ),
             Menu.SEPARATOR,
+            MenuItem(
+                lambda text: f"Update to v{self._pending_update['version']}" if self._pending_update else "Check for updates",
+                self._on_update_click,
+            ),
             MenuItem(
                 "Restart",
                 self._on_restart_click,
@@ -456,6 +468,33 @@ class TrayApp:
                 subprocess.Popen(["notepad.exe", str(PROFILE_PATH)])
         except Exception as e:
             logger.error(f"Failed to open profile: {e}")
+
+    def _on_update_available(self, version: str, download_url: str) -> None:
+        """Called by Updater when a new version is found."""
+        self._pending_update = {"version": version, "url": download_url}
+        logger.info(f"Update available: v{version}")
+        if self._icon:
+            self._icon.notify(
+                t("notify.update_available", version=version),
+                "Groq Dictation",
+            )
+
+    def _on_update_click(self, _icon=None, _item=None) -> None:
+        """Handle update menu click."""
+        if self._pending_update:
+            logger.info(f"User accepted update to v{self._pending_update['version']}")
+            threading.Thread(
+                target=self._updater.download_and_install,
+                args=(self._pending_update["url"],),
+                daemon=True,
+            ).start()
+        else:
+            # Manual check
+            def _check():
+                result = self._updater.check_now()
+                if not result and self._icon:
+                    self._icon.notify("No updates available", "Groq Dictation")
+            threading.Thread(target=_check, daemon=True).start()
 
     def _on_restart_click(self, _icon=None, _item=None) -> None:
         """Restart the application (re-exec the process)."""
