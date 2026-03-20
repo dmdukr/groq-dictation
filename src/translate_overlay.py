@@ -329,32 +329,83 @@ class TranslateOverlay:
             self._window = None
 
     def _translate(self, text: str, target_language: str) -> str:
-        """Call Groq LLM to translate text."""
-        try:
-            with httpx.Client(
-                base_url="https://api.groq.com/openai/v1",
-                headers={"Authorization": f"Bearer {self._groq.api_key}"},
-                timeout=30.0,
-            ) as client:
-                resp = client.post(
-                    "/chat/completions",
-                    json={
-                        "model": self._groq.llm_model,
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": TRANSLATE_PROMPT.format(language=target_language),
-                            },
-                            {"role": "user", "content": text},
-                        ],
-                        "temperature": 0.3,
-                        "max_tokens": 4000,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
+        """Translate text using DeepL (primary) with Groq LLM fallback."""
+        # Find language code
+        lang_code = "en"
+        for name, code in LANGUAGES:
+            if name == target_language:
+                lang_code = code
+                break
 
-        except Exception as e:
-            logger.error(f"Translation API error: {e}")
-            raise
+        # Try DeepL first (better quality)
+        deepl_key = self._load_deepl_key()
+        if deepl_key:
+            try:
+                return self._translate_deepl(text, lang_code, deepl_key)
+            except Exception as e:
+                logger.warning(f"DeepL failed, falling back to Groq: {e}")
+
+        # Fallback to Groq LLM
+        return self._translate_groq(text, target_language)
+
+    def _load_deepl_key(self) -> str:
+        """Load DeepL API key from settings."""
+        try:
+            if _SETTINGS_FILE.exists():
+                data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+                return data.get("deepl_key", "")
+        except Exception:
+            pass
+        return ""
+
+    def _translate_deepl(self, text: str, target_lang: str, api_key: str) -> str:
+        """Translate via DeepL API (free or pro)."""
+        # DeepL free uses api-free.deepl.com, pro uses api.deepl.com
+        base_url = "https://api-free.deepl.com" if api_key.endswith(":fx") else "https://api.deepl.com"
+
+        # DeepL uses uppercase lang codes, some need mapping
+        deepl_lang = target_lang.upper()
+        lang_map = {"EN": "EN-US", "PT": "PT-BR", "ZH": "ZH-HANS"}
+        deepl_lang = lang_map.get(deepl_lang, deepl_lang)
+
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{base_url}/v2/translate",
+                data={
+                    "auth_key": api_key,
+                    "text": text,
+                    "target_lang": deepl_lang,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            translations = data.get("translations", [])
+            if translations:
+                return translations[0].get("text", "")
+            raise ValueError("No translations in DeepL response")
+
+    def _translate_groq(self, text: str, target_language: str) -> str:
+        """Translate via Groq LLM (fallback)."""
+        with httpx.Client(
+            base_url="https://api.groq.com/openai/v1",
+            headers={"Authorization": f"Bearer {self._groq.api_key}"},
+            timeout=30.0,
+        ) as client:
+            resp = client.post(
+                "/chat/completions",
+                json={
+                    "model": self._groq.llm_model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": TRANSLATE_PROMPT.format(language=target_language),
+                        },
+                        {"role": "user", "content": text},
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 4000,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()

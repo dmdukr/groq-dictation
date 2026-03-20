@@ -184,6 +184,21 @@ class SettingsWindow:
         ttk.Label(tab_api, text=t("settings.language_hint"),
                   foreground="gray").grid(row=6, column=0, columnspan=2, sticky="w", padx=(0, 0))
 
+        # DeepL API key (for translate feature)
+        ttk.Separator(tab_api, orient="horizontal").grid(
+            row=7, column=0, columnspan=2, sticky="we", pady=(12, 4))
+
+        ttk.Label(tab_api, text=t("settings.deepl_key")).grid(row=8, column=0, sticky="w", pady=4)
+        self._deepl_key_var = tk.StringVar(master=self._window, value=self._load_deepl_key())
+        deepl_entry = ttk.Entry(tab_api, textvariable=self._deepl_key_var, width=55, show="*")
+        deepl_entry.grid(row=8, column=1, sticky="we", pady=4, padx=(8, 0))
+
+        hint_dl = tk.Label(
+            tab_api, text=t("settings.deepl_hint"),
+            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
+        )
+        hint_dl.grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
         tab_api.columnconfigure(1, weight=1)
 
         # --- Tab 2: Audio ---
@@ -497,6 +512,9 @@ class SettingsWindow:
         # Also update .env with API key
         self._write_env()
 
+        # Save DeepL key
+        self._save_deepl_key()
+
         if self._on_save:
             self._on_save()
 
@@ -580,3 +598,31 @@ class SettingsWindow:
             logger.info(f"API key saved to {env_path}")
         except Exception as e:
             logger.error(f"Failed to save .env: {e}")
+
+    def _load_deepl_key(self) -> str:
+        """Load DeepL API key from translate_settings.json."""
+        from .config import APP_DIR
+        settings_file = APP_DIR / "translate_settings.json"
+        try:
+            if settings_file.exists():
+                import json
+                data = json.loads(settings_file.read_text(encoding="utf-8"))
+                return data.get("deepl_key", "")
+        except Exception:
+            pass
+        return ""
+
+    def _save_deepl_key(self) -> None:
+        """Save DeepL API key to translate_settings.json."""
+        from .config import APP_DIR
+        import json
+        settings_file = APP_DIR / "translate_settings.json"
+        try:
+            data = {}
+            if settings_file.exists():
+                data = json.loads(settings_file.read_text(encoding="utf-8"))
+            data["deepl_key"] = self._deepl_key_var.get().strip()
+            settings_file.write_text(json.dumps(data), encoding="utf-8")
+            logger.info("DeepL key saved")
+        except Exception as e:
+            logger.warning(f"Failed to save DeepL key: {e}")

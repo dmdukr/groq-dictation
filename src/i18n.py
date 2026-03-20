@@ -311,6 +311,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Copied to clipboard",
         "uk": "Скопійовано в буфер",
     },
+    "settings.deepl_key": {
+        "en": "DeepL API Key:",
+        "uk": "DeepL API Ключ:",
+    },
+    "settings.deepl_hint": {
+        "en": "Free: deepl.com/pro → API tab → 500K chars/month free. Better translation quality.",
+        "uk": "Безкоштовно: deepl.com/pro → API → 500K символів/місяць. Краща якість перекладу.",
+    },
 }
 
 # Current language
