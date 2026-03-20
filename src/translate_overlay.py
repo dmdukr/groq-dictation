@@ -60,25 +60,23 @@ Preserve formatting, line breaks, and punctuation style."""
 _SETTINGS_FILE = APP_DIR / "translate_settings.json"
 
 
-def _load_target_lang() -> str:
-    """Load last used target language."""
+def _load_settings() -> dict:
+    """Load all translate settings."""
     try:
         if _SETTINGS_FILE.exists():
-            data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-            return data.get("target_lang", "en")
+            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
     except Exception:
         pass
-    return "en"
+    return {}
 
 
-def _save_target_lang(lang_code: str) -> None:
-    """Save target language for next time."""
+def _save_settings(updates: dict) -> None:
+    """Merge updates into translate settings file."""
     try:
         _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _SETTINGS_FILE.write_text(
-            json.dumps({"target_lang": lang_code}),
-            encoding="utf-8",
-        )
+        data = _load_settings()
+        data.update(updates)
+        _SETTINGS_FILE.write_text(json.dumps(data), encoding="utf-8")
     except Exception:
         pass
 
@@ -91,7 +89,7 @@ class TranslateOverlay:
         self._window: tk.Tk | None = None
         self._thread: threading.Thread | None = None
         self._source_text = ""
-        self._target_lang = _load_target_lang()
+        self._target_lang = _load_settings().get("target_lang", "en")
         self._deepl_rotation_idx = 0
 
     def show(self, text: str) -> None:
@@ -121,13 +119,15 @@ class TranslateOverlay:
             root = tk.Tk()
             self._window = root
             root.title("Groq Translate")
-            root.overrideredirect(True)
             root.attributes("-topmost", True)
-            root.attributes("-alpha", 0.96)  # slight frosted glass effect
+            root.attributes("-alpha", 0.96)
             root.configure(bg=BG_PRIMARY)
+            root.minsize(400, 300)
 
-            # Size and position (center of screen)
-            w, h = 620, 420
+            # Load saved size or use defaults
+            settings = _load_settings()
+            w = settings.get("window_w", 620)
+            h = settings.get("window_h", 420)
             root.update_idletasks()
             screen_w = root.winfo_screenwidth()
             screen_h = root.winfo_screenheight()
@@ -135,22 +135,18 @@ class TranslateOverlay:
             y = (screen_h - h) // 2
             root.geometry(f"{w}x{h}+{x}+{y}")
 
-            # Make window draggable
-            drag_data = {"x": 0, "y": 0}
+            # Save size on close
+            def on_close():
+                try:
+                    _save_settings({
+                        "window_w": root.winfo_width(),
+                        "window_h": root.winfo_height(),
+                    })
+                except Exception:
+                    pass
+                root.destroy()
 
-            def on_press(event):
-                drag_data["x"] = event.x
-                drag_data["y"] = event.y
-
-            def on_drag(event):
-                dx = event.x - drag_data["x"]
-                dy = event.y - drag_data["y"]
-                nx = root.winfo_x() + dx
-                ny = root.winfo_y() + dy
-                root.geometry(f"+{nx}+{ny}")
-
-            root.bind("<ButtonPress-1>", on_press)
-            root.bind("<B1-Motion>", on_drag)
+            root.protocol("WM_DELETE_WINDOW", on_close)
 
             # Main frame with padding
             frame = tk.Frame(root, bg=BG_PRIMARY, padx=20, pady=14)
@@ -166,15 +162,24 @@ class TranslateOverlay:
                 fg=ACCENT, bg=BG_PRIMARY, font=("Segoe UI", 13, "bold"),
             ).pack(side="left")
 
-            # Close button (rounded feel)
+            # Close button
             close_btn = tk.Label(
                 header, text="  \u2715  ", fg=TEXT_DIM, bg=BG_SURFACE,
                 font=("Segoe UI", 10), cursor="hand2",
             )
             close_btn.pack(side="right", padx=(8, 0))
-            close_btn.bind("<Button-1>", lambda e: root.destroy())
+            close_btn.bind("<Button-1>", lambda e: on_close())
             close_btn.bind("<Enter>", lambda e: close_btn.config(fg=DANGER, bg=BG_CARD))
             close_btn.bind("<Leave>", lambda e: close_btn.config(fg=TEXT_DIM, bg=BG_SURFACE))
+
+            # Replace button — paste translation over original selected text
+            replace_btn = tk.Label(
+                header, text="  Replace  ", fg=TEXT_SECONDARY, bg=BG_SURFACE,
+                font=("Segoe UI", 9), cursor="hand2",
+            )
+            replace_btn.pack(side="right", padx=(6, 0))
+            replace_btn.bind("<Enter>", lambda e: replace_btn.config(fg=ACCENT_HOVER, bg=BG_CARD))
+            replace_btn.bind("<Leave>", lambda e: replace_btn.config(fg=TEXT_SECONDARY, bg=BG_SURFACE))
 
             # Copy button
             copy_btn = tk.Label(
@@ -265,6 +270,39 @@ class TranslateOverlay:
 
             copy_btn.bind("<Button-1>", do_copy)
 
+            def do_replace(event=None):
+                """Replace original selected text with translation."""
+                result_text.config(state="normal")
+                translated = result_text.get("1.0", "end").strip()
+                result_text.config(state="disabled")
+                if not translated or translated == t("translate.loading"):
+                    return
+
+                # Copy translation to clipboard
+                pyperclip.copy(translated)
+
+                # Close overlay first
+                on_close()
+
+                # Small delay, then paste (Ctrl+V) over the still-selected text
+                import ctypes
+                time.sleep(0.2)
+
+                user32 = ctypes.windll.user32
+                VK_CONTROL = 0x11
+                VK_V = 0x56
+                KEYEVENTF_KEYUP = 0x0002
+
+                # Ctrl+V
+                user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                user32.keybd_event(VK_V, 0, 0, 0)
+                user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+
+                logger.info("Replaced selection with translation (%d chars)", len(translated))
+
+            replace_btn.bind("<Button-1>", do_replace)
+
             def do_translate(lang_name=None):
                 if lang_name is None:
                     lang_name = lang_var.get()
@@ -273,7 +311,7 @@ class TranslateOverlay:
                 for name, code in LANGUAGES:
                     if name == lang_name:
                         self._target_lang = code
-                        _save_target_lang(code)
+                        _save_settings({"target_lang": code})
                         break
 
                 result_text.config(state="normal")
