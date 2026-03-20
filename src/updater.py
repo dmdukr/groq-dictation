@@ -9,11 +9,9 @@ Flow:
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import threading
 import time
-from pathlib import Path
 from packaging.version import Version
 
 import httpx
@@ -99,27 +97,11 @@ class Updater:
                         "Downloaded %d bytes to %s", downloaded, installer_path
                     )
 
-            # Replace exe via bat script: wait for process to exit, copy, restart
-            import sys
-            current_exe = Path(sys.executable).resolve()
-            bat_path = download_dir / "_update.bat"
-
-            bat_content = f'''@echo off
-ping 127.0.0.1 -n 4 > nul
-copy /Y "{installer_path}" "{current_exe}"
-if errorlevel 1 (
-    ping 127.0.0.1 -n 3 > nul
-    copy /Y "{installer_path}" "{current_exe}"
-)
-start "" "{current_exe}"
-del "%~f0"
-'''
-            bat_path.write_text(bat_content, encoding="utf-8")
-            logger.info("Update script: %s → %s", installer_path, current_exe)
-
+            # Launch installer (handles killing old process, replacing files, restart)
+            logger.info("Launching installer: %s", installer_path)
             subprocess.Popen(
-                ["cmd", "/c", str(bat_path)],
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                [str(installer_path), "/SILENT"],
+                creationflags=subprocess.DETACHED_PROCESS,
             )
 
             logger.info("Exiting for update...")
@@ -177,12 +159,12 @@ del "%~f0"
                 logger.debug("Up to date (local=%s, remote=%s)", APP_VERSION, tag)
                 return None
 
-            # Find standalone exe asset (not installer/setup)
+            # Find setup installer asset (preferred for onedir mode)
             exe_url = ""
             exe_name = ""
             for asset in data.get("assets", []):
                 name = asset.get("name", "")
-                if name.endswith(".exe") and "setup" not in name.lower():
+                if name.endswith(".exe") and "setup" in name.lower():
                     exe_url = asset.get("browser_download_url", "")
                     exe_name = name
                     break

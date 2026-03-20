@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Groq Dictation."""
+"""PyInstaller spec for Groq Dictation — onedir mode (no _MEI temp extraction)."""
 
 import os
 import sys
@@ -53,7 +53,6 @@ a = Analysis(
         'numpy',
         'scipy',
         'pandas',
-        # 'tkinter',  # needed by overlay and settings_ui
         'unittest',
         'test',
         'xmlrpc',
@@ -67,24 +66,32 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Onedir mode: exe + DLLs in same folder, no temp extraction
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
+    [],  # no binaries/datas in exe — they go into COLLECT
     name='GroqDictation',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,  # use default %TEMP%
-    console=False,  # windowed (no console)
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='GroqDictation',
 )
