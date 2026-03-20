@@ -1,11 +1,23 @@
-"""Text normalization via Groq LLM post-processing.
+"""Text normalization via Groq LLM — session-based architecture.
 
-Two-pass normalization:
-  Pass 1: Fix recognition errors, remove fillers, restore words from context
-  Pass 2: Polish grammar, ensure coherent sentences
+Instead of sending a fresh prompt with every dictation, maintains a persistent
+conversation session with the LLM.  The system prompt (corrections, terms,
+rules) is sent ONCE.  Each dictation is a new user message in the same
+conversation, so the LLM remembers context and makes smarter term decisions.
+
+Session lifecycle:
+  1. First dictation → open session (system prompt sent once)
+  2. Subsequent dictations → append to conversation
+  3. At 80% context window → handoff:
+     a. Ask OLD session to summarize context
+     b. Collect golden texts (edited || normalized) from triads
+     c. Open NEW session with prompt + summary + golden texts
+  4. 30 min inactivity → reset session
 """
 
 import logging
+import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
@@ -15,104 +27,66 @@ from .config import GroqConfig, NormalizationConfig
 
 logger = logging.getLogger(__name__)
 
-PASS1_PROMPT = """\
-You are a speech-to-text post-processor. Your job is to fix a raw voice transcription.
+# ── Constants ────────────────────────────────────────────────────────────
+
+# llama-3.3-70b context window
+MAX_CONTEXT_TOKENS = 128_000
+HANDOFF_THRESHOLD = 0.80  # 80% → trigger handoff
+INACTIVITY_TIMEOUT_S = 30 * 60  # 30 min
+
+SYSTEM_PROMPT = """\
+You are a speech-to-text post-processor running inside a dictation app.
+You receive raw voice transcriptions one at a time and return ONLY the corrected text.
 
 RULES:
-1. Remove ALL filler words: ну, эм, ээ, типа, как бы, значит, короче, вот, ну типа, like, uh, um, ehm, so, you know, basically
-2. CRITICALLY IMPORTANT: Fix misrecognized words. Whisper often confuses similar-sounding syllables (е/и, а/о, в/б, etc.). If a word looks wrong but sounds similar to the correct one, FIX IT. Examples: "вашел"→"вышел", "побегает"→"выбегает", "расказ"→"рассказ". Use surrounding context, common phrases, idioms, well-known quotes, songs, and poems to determine the correct word.
-3. If you see random Latin letters, gibberish, or keyboard sequences — this is a recognition error. Replace with the intended Cyrillic word.
-4. Fix punctuation: add periods, commas, question marks where natural pauses occur.
-5. Fix capitalization: start of sentences, proper nouns.
-6. Format numbers and dates properly (e.g., "двадцать третье марта" → "23 марта").
-7. Preserve the speaker's intent, but DO fix wrong words that are clearly recognition errors.
-8. Do NOT translate between languages — if someone mixes Russian, Ukrainian, and English, keep it mixed.
-9. Do NOT add any text that wasn't in the original.
-10. Return ONLY the corrected text, no explanations.
+1. Remove filler words: ну, эм, ээ, типа, как бы, значит, короче, like, uh, um, so.
+2. Fix misrecognized words. Whisper confuses similar syllables (е/и, а/о, в/б, пре/при/вы).
+   Use context, common phrases, idioms, well-known quotes to determine the correct word.
+3. Fix punctuation, capitalization, number formatting ("двадцять третє" → "23-тє").
+4. NEVER translate between languages — keep English as English, Ukrainian as Ukrainian, Russian as Russian.
+5. NEVER add text that wasn't in the original.
+6. Return ONLY the corrected text, no explanations or commentary.
 
-{lang_instruction}
-{profile_instruction}
-{terms_instruction}
-{context_instruction}
+You will receive multiple dictations during this session.
+Use conversation context to make smarter decisions about ambiguous terms.
 
-RAW TRANSCRIPTION:
-{text}"""
+{profile_section}"""
 
-PASS2_PROMPT = """\
-You are a text editor. Polish this dictated text to ensure it reads as coherent, complete sentences or paragraphs.
-
-RULES:
-1. Fix any remaining grammatical issues.
-2. Ensure sentences are complete and logically connected.
-3. If a sentence is clearly unfinished or broken, reconstruct it to the most likely intended meaning.
-4. Keep the style natural — this is dictated speech, not formal writing.
-5. Do NOT change the meaning or add new information.
-6. CRITICALLY IMPORTANT: Do NOT translate between languages. Keep Ukrainian as Ukrainian, Russian as Russian, English as English.
-7. Return ONLY the polished text, no explanations.
-
-{lang_instruction}
-{context_instruction}
-
-TEXT TO POLISH:
-{text}"""
+HANDOFF_SUMMARY_PROMPT = """\
+Summarize this conversation in 2-3 sentences for context handoff to a new session.
+Focus on: what topics were discussed, which domain terms appeared, what language mix was used.
+Be concise — this summary will be injected as context for the next session."""
 
 
 class Normalizer:
-    """Normalizes transcribed text using Groq LLM with two-pass processing."""
+    """Session-based normalizer — maintains LLM conversation state."""
 
     def __init__(self, groq_config: GroqConfig, norm_config: NormalizationConfig,
                  profile=None):
         self._groq_config = groq_config
         self._norm_config = norm_config
-        self._profile = profile  # UserProfile instance (optional)
+        self._profile = profile
         self._http = httpx.Client(
             base_url="https://api.groq.com/openai/v1",
             headers={"Authorization": f"Bearer {groq_config.api_key}"},
             timeout=30.0,
         )
 
-    @staticmethod
-    def _detect_language_instruction(text: str) -> str:
-        """Detect dominant language by character analysis and return instruction."""
-        # Ukrainian-specific letters (not in Russian)
-        uk_chars = set("іїєґІЇЄҐ")
-        # Russian-specific letters (not in Ukrainian)
-        ru_chars = set("ёъыЁЪЫэЭ")
-        # Latin
-        latin_count = sum(1 for c in text if c.isalpha() and c.isascii())
-        cyrillic_count = sum(1 for c in text if c.isalpha() and not c.isascii())
-        uk_count = sum(1 for c in text if c in uk_chars)
-        ru_count = sum(1 for c in text if c in ru_chars)
+        # Session state
+        self._messages: list[dict] = []
+        self._session_tokens: int = 0
+        self._last_activity: float = 0
+        self._session_active: bool = False
+        self._lock = threading.Lock()
 
-        total = latin_count + cyrillic_count
-        if total == 0:
-            return ""
-
-        parts = []
-        if cyrillic_count > latin_count:
-            if uk_count > 0 and ru_count == 0:
-                parts.append("DETECTED LANGUAGE: Ukrainian. Output MUST be in Ukrainian. Do NOT translate to Russian.")
-            elif ru_count > 0 and uk_count == 0:
-                parts.append("DETECTED LANGUAGE: Russian. Output MUST be in Russian. Do NOT translate to Ukrainian.")
-            elif uk_count > ru_count:
-                parts.append("DETECTED LANGUAGE: Ukrainian (with some Russian). Keep Ukrainian as dominant language.")
-            elif ru_count > uk_count:
-                parts.append("DETECTED LANGUAGE: Russian (with some Ukrainian). Keep Russian as dominant language.")
-            else:
-                parts.append("DETECTED LANGUAGE: Cyrillic (Ukrainian/Russian). Preserve the original language, do NOT translate.")
-        elif latin_count > cyrillic_count:
-            parts.append("DETECTED LANGUAGE: English. Output MUST be in English.")
-        else:
-            parts.append("DETECTED LANGUAGE: Mixed. Preserve each word's original language.")
-
-        return "\n".join(parts)
+    # ── Public API ──────────────────────────────────────────────────────
 
     def normalize(self, raw_text: str, context: str = "") -> str:
-        """Two-pass normalization: fix errors, then polish.
+        """Normalize raw transcription using session-based LLM conversation.
 
         Args:
             raw_text: Raw transcription from Whisper.
-            context: Text from active window (paragraph before cursor) for reference.
+            context: Text from active window (paragraph before cursor).
         """
         if not raw_text.strip():
             return raw_text
@@ -120,51 +94,45 @@ class Normalizer:
         if not self._norm_config.enabled:
             return raw_text
 
-        # Detect dominant language of the phrase
+        with self._lock:
+            # Check inactivity timeout
+            if (self._session_active
+                    and self._last_activity > 0
+                    and time.monotonic() - self._last_activity > INACTIVITY_TIMEOUT_S):
+                logger.info("Session expired (inactivity %ds)", INACTIVITY_TIMEOUT_S)
+                self._reset_session()
+
+            # Check context window threshold
+            if (self._session_active
+                    and self._session_tokens > MAX_CONTEXT_TOKENS * HANDOFF_THRESHOLD):
+                logger.info(
+                    "Session at %d/%d tokens (%.0f%%) — triggering handoff",
+                    self._session_tokens, MAX_CONTEXT_TOKENS,
+                    self._session_tokens / MAX_CONTEXT_TOKENS * 100,
+                )
+                self._do_handoff()
+
+            # Start new session if needed
+            if not self._session_active:
+                self._start_session()
+
+            self._last_activity = time.monotonic()
+
+        # Build user message
         lang_instruction = self._detect_language_instruction(raw_text)
-
-        # Build instructions
-        profile_instruction = ""
-        if self._profile:
-            profile_instruction = self._profile.get_prompt_context()
-            if profile_instruction:
-                logger.info("Profile context injected (%d chars)", len(profile_instruction))
-
-        terms_instruction = ""
-        if self._norm_config.known_terms:
-            terms = ", ".join(self._norm_config.known_terms)
-            terms_instruction = f"KNOWN TERMS (preserve exactly): {terms}"
-
-        context_instruction = ""
+        user_msg = raw_text
+        if lang_instruction:
+            user_msg = f"[{lang_instruction}]\n{raw_text}"
         if context.strip():
-            context_instruction = f"PRECEDING TEXT IN DOCUMENT (for context only, do not include in output):\n{context.strip()}"
+            user_msg = f"[Context in document: {context.strip()[:200]}]\n{user_msg}"
 
-        # Pass 1: Fix recognition errors and fillers
-        pass1_prompt = PASS1_PROMPT.format(
-            profile_instruction=profile_instruction,
-            terms_instruction=terms_instruction,
-            context_instruction=context_instruction,
-            lang_instruction=lang_instruction,
-            text=raw_text,
-        )
-        pass1_result = self._call_llm(pass1_prompt, "pass1", lang_instruction)
-        if not pass1_result:
+        # Send to LLM
+        result = self._send_message(user_msg)
+        if not result:
             return raw_text
 
-        # Pass 2: Polish grammar and coherence
-        pass2_prompt = PASS2_PROMPT.format(
-            lang_instruction=lang_instruction,
-            context_instruction=context_instruction,
-            text=pass1_result,
-        )
-        pass2_result = self._call_llm(pass2_prompt, "pass2", lang_instruction)
-
-        final = pass2_result or pass1_result
-        logger.info(
-            "Normalized: %d chars → pass1: %d → pass2: %d",
-            len(raw_text), len(pass1_result), len(final),
-        )
-        return final
+        logger.info("Normalized: %d → %d chars", len(raw_text), len(result))
+        return result
 
     def normalize_async(
         self,
@@ -184,92 +152,231 @@ class Normalizer:
                 future = pool.submit(self.normalize, raw_text, context)
                 callback(future.result())
 
-    def _call_llm(self, prompt: str, pass_name: str, lang_instruction: str = "") -> str | None:
-        """Call Groq LLM with retry."""
-        try:
-            # Use compiled prompt from profile if available, else default
-            system_prompt = (
-                "You are a speech-to-text error corrector. "
-                "Whisper often mishears syllables: е↔а, и↔ы, в↔б, пре↔при↔вы, etc. "
-                "You MUST fix these phonetic errors. If the text contains a well-known "
-                "phrase, poem, song, or idiom with wrong words — fix them to the canonical version. "
-                "NEVER translate words between languages — keep English words in English as-is. "
-                "Output ONLY the corrected text."
-            )
-            if self._profile:
-                compiled = self._profile.get_prompt_context()
-                if compiled:
-                    system_prompt = compiled
+    def get_session_info(self) -> dict:
+        """Return session diagnostics."""
+        with self._lock:
+            return {
+                "active": self._session_active,
+                "tokens": self._session_tokens,
+                "tokens_pct": round(self._session_tokens / MAX_CONTEXT_TOKENS * 100, 1) if self._session_tokens else 0,
+                "messages": len(self._messages),
+                "threshold": HANDOFF_THRESHOLD,
+            }
 
-            # Always append language instruction to system prompt
-            if lang_instruction:
-                system_prompt += f"\n\nCRITICAL LANGUAGE RULE: {lang_instruction}"
+    # ── Session Management ──────────────────────────────────────────────
+
+    def _start_session(self, handoff_context: str = "") -> None:
+        """Initialize a new LLM session with system prompt."""
+        # Build profile section
+        profile_section = ""
+        if self._profile:
+            profile_ctx = self._profile.get_prompt_context()
+            if profile_ctx:
+                profile_section = f"\n{profile_ctx}"
+                logger.info("Profile injected into session (%d chars)", len(profile_ctx))
+
+        system_content = SYSTEM_PROMPT.format(profile_section=profile_section)
+
+        # Add handoff context if this is a continuation
+        if handoff_context:
+            system_content += f"\n\nPREVIOUS SESSION CONTEXT:\n{handoff_context}"
+            logger.info("Handoff context injected (%d chars)", len(handoff_context))
+
+        self._messages = [{"role": "system", "content": system_content}]
+        self._session_tokens = len(system_content) // 3  # rough estimate until first API call
+        self._session_active = True
+        self._last_activity = time.monotonic()
+        logger.info(
+            "Session started (est. %d tokens, %d chars system prompt)",
+            self._session_tokens, len(system_content),
+        )
+
+    def _reset_session(self) -> None:
+        """Close session without handoff."""
+        self._messages.clear()
+        self._session_tokens = 0
+        self._session_active = False
+        logger.info("Session reset")
+
+    def _do_handoff(self) -> None:
+        """Perform session handoff: summarize old → start new."""
+        # Step 1: Ask old session for context summary
+        summary = self._get_session_summary()
+
+        # Step 2: Collect golden texts from profile triads
+        golden_texts = self._collect_golden_texts()
+
+        # Step 3: Build handoff context
+        parts = []
+        if summary:
+            parts.append(f"Summary: {summary}")
+        if golden_texts:
+            parts.append(f"Recent dictations (user-approved text):\n{golden_texts}")
+
+        handoff_context = "\n\n".join(parts) if parts else ""
+
+        # Step 4: Reset and start new session
+        self._messages.clear()
+        self._session_tokens = 0
+        self._session_active = False
+        self._start_session(handoff_context)
+
+        logger.info("Handoff complete: summary=%d chars, golden=%d chars",
+                     len(summary), len(golden_texts))
+
+    def _get_session_summary(self) -> str:
+        """Ask current session to summarize conversation context."""
+        if len(self._messages) < 3:  # system + at least one exchange
+            return ""
+
+        try:
+            messages = self._messages + [
+                {"role": "user", "content": HANDOFF_SUMMARY_PROMPT}
+            ]
 
             resp = self._http.post(
                 "/chat/completions",
                 json={
                     "model": self._groq_config.llm_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": 300,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            summary = data["choices"][0]["message"]["content"].strip()
+            logger.info("Session summary: %s", summary[:100])
+            return summary
+
+        except Exception as e:
+            logger.warning("Failed to get session summary: %s", e)
+            return ""
+
+    def _collect_golden_texts(self) -> str:
+        """Collect best version of each dictation from profile history."""
+        if not self._profile:
+            return ""
+
+        try:
+            with self._profile._lock:
+                history = self._profile._data.get("history", [])
+
+            if not history:
+                return ""
+
+            lines = []
+            # Last 20 entries to keep it manageable
+            for h in history[-20:]:
+                edited = h.get("edited", "").strip()
+                normalized = h.get("normalized", "").strip()
+                best = edited if edited else normalized
+                if best:
+                    lines.append(f"- {best}")
+
+            return "\n".join(lines) if lines else ""
+
+        except Exception as e:
+            logger.warning("Failed to collect golden texts: %s", e)
+            return ""
+
+    # ── LLM Communication ───────────────────────────────────────────────
+
+    def _send_message(self, user_content: str) -> str | None:
+        """Send a message in the current session and get response."""
+        with self._lock:
+            self._messages.append({"role": "user", "content": user_content})
+
+        try:
+            resp = self._http.post(
+                "/chat/completions",
+                json={
+                    "model": self._groq_config.llm_model,
+                    "messages": self._messages,
                     "temperature": self._norm_config.temperature,
                     "max_tokens": 2000,
                 },
             )
 
             if resp.status_code == 429:
-                logger.warning("Rate limit in %s, retrying...", pass_name)
-                return self._retry_llm(prompt, pass_name)
-            if resp.status_code == 401:
-                logger.error("Auth failed in %s", pass_name)
-                return None
-
-            resp.raise_for_status()
-            data = resp.json()
-            result = data["choices"][0]["message"]["content"]
-            if result:
-                cleaned = result.strip()
-                logger.info("LLM %s: '%s'", pass_name, cleaned[:100])
-                return cleaned
-            return None
-
-        except httpx.HTTPStatusError as e:
-            logger.error("LLM %s HTTP error: %s", pass_name, e)
-            return None
-        except Exception as e:
-            logger.error("LLM %s error: %s", pass_name, e)
-            return None
-
-    def _retry_llm(self, prompt: str, pass_name: str) -> str | None:
-        """Retry with backoff."""
-        import time
-        for i, delay in enumerate([2, 4]):
-            time.sleep(delay)
-            try:
+                logger.warning("Rate limited, retrying...")
+                import time as _time
+                _time.sleep(2)
                 resp = self._http.post(
                     "/chat/completions",
                     json={
                         "model": self._groq_config.llm_model,
-                        "messages": [
-                            {"role": "system", "content": (
-                                "You are a speech-to-text error corrector. "
-                                "Whisper often mishears syllables. "
-                                "Fix phonetic errors and restore well-known phrases. "
-                                "NEVER translate words between languages — keep English words in English. "
-                                "Output ONLY the corrected text."
-                            )},
-                            {"role": "user", "content": prompt},
-                        ],
+                        "messages": self._messages,
                         "temperature": self._norm_config.temperature,
                         "max_tokens": 2000,
                     },
                 )
-                resp.raise_for_status()
-                data = resp.json()
-                result = data["choices"][0]["message"]["content"]
-                if result:
-                    return result.strip()
-            except Exception as e:
-                logger.warning("Retry %d for %s failed: %s", i + 1, pass_name, e)
-        return None
+
+            if resp.status_code == 401:
+                logger.error("Auth failed")
+                with self._lock:
+                    self._messages.pop()  # remove failed user message
+                return None
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            result = data["choices"][0]["message"]["content"].strip()
+
+            # Track actual token usage from API
+            usage = data.get("usage", {})
+            total_tokens = usage.get("total_tokens", 0)
+            if total_tokens:
+                with self._lock:
+                    self._session_tokens = total_tokens
+
+            # Add assistant response to conversation
+            with self._lock:
+                self._messages.append({"role": "assistant", "content": result})
+
+            logger.info("LLM response (%d tokens total): '%s'",
+                        self._session_tokens, result[:100])
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error("LLM HTTP error: %s", e)
+            with self._lock:
+                self._messages.pop()  # remove failed user message
+            return None
+        except Exception as e:
+            logger.error("LLM error: %s", e)
+            with self._lock:
+                self._messages.pop()
+            return None
+
+    # ── Utilities ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _detect_language_instruction(text: str) -> str:
+        """Detect dominant language by character analysis."""
+        uk_chars = set("іїєґІЇЄҐ")
+        ru_chars = set("ёъыЁЪЫэЭ")
+        latin_count = sum(1 for c in text if c.isalpha() and c.isascii())
+        cyrillic_count = sum(1 for c in text if c.isalpha() and not c.isascii())
+        uk_count = sum(1 for c in text if c in uk_chars)
+        ru_count = sum(1 for c in text if c in ru_chars)
+
+        total = latin_count + cyrillic_count
+        if total == 0:
+            return ""
+
+        if cyrillic_count > latin_count:
+            if uk_count > 0 and ru_count == 0:
+                return "Language: Ukrainian"
+            elif ru_count > 0 and uk_count == 0:
+                return "Language: Russian"
+            elif uk_count > ru_count:
+                return "Language: Ukrainian (primary)"
+            elif ru_count > uk_count:
+                return "Language: Russian (primary)"
+            else:
+                return "Language: Cyrillic (preserve original)"
+        elif latin_count > cyrillic_count:
+            return "Language: English"
+        else:
+            return "Language: Mixed (preserve each word's language)"
