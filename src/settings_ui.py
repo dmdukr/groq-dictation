@@ -184,14 +184,26 @@ class SettingsWindow:
         ttk.Label(tab_api, text=t("settings.language_hint"),
                   foreground="gray").grid(row=6, column=0, columnspan=2, sticky="w", padx=(0, 0))
 
-        # DeepL API key (for translate feature)
+        # DeepL API keys (for translate feature, rotation across 5 keys)
         ttk.Separator(tab_api, orient="horizontal").grid(
             row=7, column=0, columnspan=2, sticky="we", pady=(12, 4))
 
-        ttk.Label(tab_api, text=t("settings.deepl_key")).grid(row=8, column=0, sticky="w", pady=4)
-        self._deepl_key_var = tk.StringVar(master=self._window, value=self._load_deepl_key())
-        deepl_entry = ttk.Entry(tab_api, textvariable=self._deepl_key_var, width=55, show="*")
-        deepl_entry.grid(row=8, column=1, sticky="we", pady=4, padx=(8, 0))
+        ttk.Label(tab_api, text=t("settings.deepl_key")).grid(row=8, column=0, sticky="nw", pady=4)
+
+        deepl_frame = ttk.Frame(tab_api)
+        deepl_frame.grid(row=8, column=1, sticky="we", pady=4, padx=(8, 0))
+
+        saved_keys = self._load_deepl_keys()
+        self._deepl_key_vars = []
+        for i in range(5):
+            val = saved_keys[i] if i < len(saved_keys) else ""
+            var = tk.StringVar(master=self._window, value=val)
+            self._deepl_key_vars.append(var)
+            entry = ttk.Entry(deepl_frame, textvariable=var, width=50, show="*")
+            entry.grid(row=i, column=0, sticky="we", pady=1)
+            ttk.Label(deepl_frame, text=f"#{i+1}", foreground="gray").grid(
+                row=i, column=1, padx=(4, 0))
+        deepl_frame.columnconfigure(0, weight=1)
 
         hint_dl = tk.Label(
             tab_api, text=t("settings.deepl_hint"),
@@ -599,21 +611,24 @@ class SettingsWindow:
         except Exception as e:
             logger.error(f"Failed to save .env: {e}")
 
-    def _load_deepl_key(self) -> str:
-        """Load DeepL API key from translate_settings.json."""
+    def _load_deepl_keys(self) -> list[str]:
+        """Load DeepL API keys from translate_settings.json."""
         from .config import APP_DIR
         settings_file = APP_DIR / "translate_settings.json"
         try:
             if settings_file.exists():
                 import json
                 data = json.loads(settings_file.read_text(encoding="utf-8"))
-                return data.get("deepl_key", "")
+                keys = data.get("deepl_keys", [])
+                if not keys and data.get("deepl_key"):
+                    keys = [data["deepl_key"]]
+                return keys
         except Exception:
             pass
-        return ""
+        return []
 
     def _save_deepl_key(self) -> None:
-        """Save DeepL API key to translate_settings.json."""
+        """Save all DeepL API keys to translate_settings.json."""
         from .config import APP_DIR
         import json
         settings_file = APP_DIR / "translate_settings.json"
@@ -621,8 +636,10 @@ class SettingsWindow:
             data = {}
             if settings_file.exists():
                 data = json.loads(settings_file.read_text(encoding="utf-8"))
-            data["deepl_key"] = self._deepl_key_var.get().strip()
+            keys = [v.get().strip() for v in self._deepl_key_vars]
+            data["deepl_keys"] = [k for k in keys if k]
+            data.pop("deepl_key", None)  # remove legacy single key
             settings_file.write_text(json.dumps(data), encoding="utf-8")
-            logger.info("DeepL key saved")
+            logger.info("DeepL keys saved (%d)", len(data["deepl_keys"]))
         except Exception as e:
-            logger.warning(f"Failed to save DeepL key: {e}")
+            logger.warning(f"Failed to save DeepL keys: {e}")

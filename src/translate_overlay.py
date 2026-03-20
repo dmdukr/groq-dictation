@@ -92,6 +92,7 @@ class TranslateOverlay:
         self._thread: threading.Thread | None = None
         self._source_text = ""
         self._target_lang = _load_target_lang()
+        self._deepl_rotation_idx = 0
 
     def show(self, text: str) -> None:
         """Show overlay with text to translate."""
@@ -329,7 +330,7 @@ class TranslateOverlay:
             self._window = None
 
     def _translate(self, text: str, target_language: str) -> str:
-        """Translate text using DeepL (primary) with Groq LLM fallback."""
+        """Translate text using DeepL (primary, key rotation) with Groq LLM fallback."""
         # Find language code
         lang_code = "en"
         for name, code in LANGUAGES:
@@ -337,33 +338,58 @@ class TranslateOverlay:
                 lang_code = code
                 break
 
-        # Try DeepL first (better quality)
-        deepl_key = self._load_deepl_key()
-        if deepl_key:
-            try:
-                return self._translate_deepl(text, lang_code, deepl_key)
-            except Exception as e:
-                logger.warning(f"DeepL failed, falling back to Groq: {e}")
+        # Try DeepL with key rotation
+        keys = self._load_deepl_keys()
+        if keys:
+            # Try each key starting from rotation index
+            for attempt in range(len(keys)):
+                key = self._next_deepl_key(keys)
+                try:
+                    result = self._translate_deepl(text, lang_code, key)
+                    logger.info("DeepL OK (key #%d)", (self._deepl_rotation_idx - 1) % len(keys) + 1)
+                    return result
+                except ValueError as e:
+                    if "quota exceeded" in str(e).lower():
+                        logger.warning("DeepL key #%d quota exceeded, trying next",
+                                       (self._deepl_rotation_idx - 1) % len(keys) + 1)
+                        continue
+                    raise
+                except Exception as e:
+                    logger.warning("DeepL key #%d failed: %s",
+                                   (self._deepl_rotation_idx - 1) % len(keys) + 1, e)
+                    continue
+
+            logger.warning("All %d DeepL keys exhausted, falling back to Groq", len(keys))
 
         # Fallback to Groq LLM
         return self._translate_groq(text, target_language)
 
-    def _load_deepl_key(self) -> str:
-        """Load DeepL API key from settings."""
+    def _load_deepl_keys(self) -> list[str]:
+        """Load all DeepL API keys from settings."""
         try:
             if _SETTINGS_FILE.exists():
                 data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-                return data.get("deepl_key", "")
+                keys = data.get("deepl_keys", [])
+                # Migration: single key → list
+                if not keys and data.get("deepl_key"):
+                    keys = [data["deepl_key"]]
+                return [k for k in keys if k.strip()]
         except Exception:
             pass
-        return ""
+        return []
+
+    def _next_deepl_key(self, keys: list[str]) -> str:
+        """Round-robin key rotation."""
+        if not keys:
+            return ""
+        idx = self._deepl_rotation_idx % len(keys)
+        self._deepl_rotation_idx += 1
+        return keys[idx]
 
     def _translate_deepl(self, text: str, target_lang: str, api_key: str) -> str:
         """Translate via DeepL API (free or pro)."""
-        # DeepL free uses api-free.deepl.com, pro uses api.deepl.com
         base_url = "https://api-free.deepl.com" if api_key.endswith(":fx") else "https://api.deepl.com"
 
-        # DeepL uses uppercase lang codes, some need mapping
         deepl_lang = target_lang.upper()
         lang_map = {"EN": "EN-US", "PT": "PT-BR", "ZH": "ZH-HANS"}
         deepl_lang = lang_map.get(deepl_lang, deepl_lang)
@@ -377,6 +403,8 @@ class TranslateOverlay:
                     "target_lang": deepl_lang,
                 },
             )
+            if resp.status_code == 456:
+                raise ValueError("DeepL quota exceeded for this key")
             resp.raise_for_status()
             data = resp.json()
             translations = data.get("translations", [])
