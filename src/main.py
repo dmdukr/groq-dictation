@@ -52,16 +52,15 @@ def main() -> None:
     """Main entry point."""
     # Single instance check
     if not _check_single_instance():
-        print("Groq Dictation is already running!", file=sys.stderr)
-        # Try to show a message box
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(
-                0, "Groq Dictation is already running.", "Groq Dictation", 0x40
-            )
-        except Exception:
-            pass
+        # Silently exit — no dialog (avoids annoying popups on boot)
         sys.exit(0)
+
+    # Cleanup duplicate autostart entries
+    try:
+        from .settings_ui import _cleanup_duplicate_autostart
+        _cleanup_duplicate_autostart()
+    except Exception:
+        pass
 
     # Cleanup stale PyInstaller _MEI* temp dirs
     if getattr(sys, "frozen", False):

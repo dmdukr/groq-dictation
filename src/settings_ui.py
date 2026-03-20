@@ -33,9 +33,34 @@ def _get_autostart() -> bool:
         return False
 
 
+def _cleanup_duplicate_autostart() -> None:
+    """Remove duplicate autostart entries (installer vs app name mismatch)."""
+    # Installer used "Groq Dictation" (with space), app uses "GroqDictation"
+    alt_names = ["Groq Dictation", "GroqDictation"]
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_RUN_KEY, 0,
+                            winreg.KEY_SET_VALUE | winreg.KEY_READ) as key:
+            found = []
+            for name in alt_names:
+                try:
+                    winreg.QueryValueEx(key, name)
+                    found.append(name)
+                except FileNotFoundError:
+                    pass
+            # If both exist, remove the one that doesn't match APP_NAME
+            if len(found) > 1:
+                for name in found:
+                    if name != APP_NAME:
+                        winreg.DeleteValue(key, name)
+                        logger.info(f"Removed duplicate autostart: {name}")
+    except Exception:
+        pass
+
+
 def _set_autostart(enabled: bool) -> None:
     """Add or remove app from Windows startup registry."""
     try:
+        _cleanup_duplicate_autostart()
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
             if enabled:
                 # Use the exe path if frozen, otherwise pythonw -m src.main
