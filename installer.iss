@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 
 #define MyAppName "Groq Dictation"
-#define MyAppVersion "1.4.9"
+#define MyAppVersion "1.5.0"
 #define MyAppPublisher "dmdukr"
 #define MyAppURL "https://github.com/dmdukr/groq-dictation"
 #define MyAppExeName "GroqDictation.exe"

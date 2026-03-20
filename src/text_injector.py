@@ -141,29 +141,13 @@ class TextInjector:
             pyperclip.copy("")
             time.sleep(0.05)
 
-            # Select text: End (ensure at line end), then Shift+Home + Shift+Up × N
+            # Select all text from cursor to start of document: Ctrl+Shift+Home
+            # This reliably captures multi-line text regardless of line width
             VK_HOME = 0x24
-            VK_END = 0x23
-            VK_UP = 0x26
 
-            # Go to end of current line
-            send(_key(VK_END), _key(VK_END, up=True))
-            time.sleep(0.02)
-
-            # Estimate lines: ~60 chars per line, minimum 1
-            num_lines = max(1, (char_count // 60) + 1)
-
-            # Shift+Home (select to start of current line)
-            send(_key(VK_SHIFT))
+            send(_key(VK_CONTROL), _key(VK_SHIFT))
             send(_key(VK_HOME), _key(VK_HOME, up=True))
-            time.sleep(0.02)
-
-            # Shift+Up × N (extend selection upward)
-            for _ in range(num_lines):
-                send(_key(VK_UP), _key(VK_UP, up=True))
-                time.sleep(0.01)
-
-            send(_key(VK_SHIFT, up=True))
+            send(_key(VK_SHIFT, up=True), _key(VK_CONTROL, up=True))
             time.sleep(0.05)
 
             # Ctrl+C via SendInput

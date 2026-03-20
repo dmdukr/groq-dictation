@@ -99,12 +99,27 @@ class Updater:
                         "Downloaded %d bytes to %s", downloaded, installer_path
                     )
 
-            # Launch installer (Inno Setup) — no /SILENT because SmartScreen
-            # blocks unsigned silent installs. User sees normal Inno Setup UI.
-            logger.info("Launching installer: %s", installer_path)
+            # Replace exe via bat script: wait for process to exit, copy, restart
+            import sys
+            current_exe = Path(sys.executable).resolve()
+            bat_path = download_dir / "_update.bat"
+
+            bat_content = f'''@echo off
+ping 127.0.0.1 -n 4 > nul
+copy /Y "{installer_path}" "{current_exe}"
+if errorlevel 1 (
+    ping 127.0.0.1 -n 3 > nul
+    copy /Y "{installer_path}" "{current_exe}"
+)
+start "" "{current_exe}"
+del "%~f0"
+'''
+            bat_path.write_text(bat_content, encoding="utf-8")
+            logger.info("Update script: %s → %s", installer_path, current_exe)
+
             subprocess.Popen(
-                [str(installer_path)],
-                creationflags=subprocess.DETACHED_PROCESS,
+                ["cmd", "/c", str(bat_path)],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
             )
 
             logger.info("Exiting for update...")
@@ -162,28 +177,31 @@ class Updater:
                 logger.debug("Up to date (local=%s, remote=%s)", APP_VERSION, tag)
                 return None
 
-            # Find installer asset (.exe)
-            installer_url = ""
-            installer_name = ""
+            # Find standalone exe asset (not installer/setup)
+            exe_url = ""
+            exe_name = ""
             for asset in data.get("assets", []):
                 name = asset.get("name", "")
-                if name.endswith(".exe") and "setup" in name.lower():
-                    installer_url = asset.get("browser_download_url", "")
-                    installer_name = name
+                if name.endswith(".exe") and "setup" not in name.lower():
+                    exe_url = asset.get("browser_download_url", "")
+                    exe_name = name
                     break
 
-            if not installer_url:
-                # Try any .exe
+            if not exe_url:
+                # Fallback: any .exe
                 for asset in data.get("assets", []):
                     name = asset.get("name", "")
                     if name.endswith(".exe"):
-                        installer_url = asset.get("browser_download_url", "")
-                        installer_name = name
+                        exe_url = asset.get("browser_download_url", "")
+                        exe_name = name
                         break
 
-            if not installer_url:
-                logger.info("New version %s available but no installer asset found", tag)
+            if not exe_url:
+                logger.info("New version %s available but no exe asset found", tag)
                 return None
+
+            installer_url = exe_url
+            installer_name = exe_name
 
             logger.info("Update available: %s → %s (%s)", APP_VERSION, tag, installer_name)
 
