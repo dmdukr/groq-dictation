@@ -37,7 +37,7 @@ class DictationEngine:
     During RECORDING:
       - AudioCapture records from mic
       - ChunkManager splits audio on pauses via VAD
-      - Each chunk → GroqSTT → text typed into active window (draft)
+      - Each chunk → STT provider → text typed into active window (draft)
 
     On toggle (stop):
       - Flush remaining audio
@@ -117,7 +117,7 @@ class DictationEngine:
         self._quota_callback = callback
 
     def _on_quota_warning(self, remaining: int, limit: int) -> None:
-        """Called by GroqSTT when quota threshold is reached."""
+        """Called by STT connector when quota threshold is reached."""
         if self._quota_callback:
             self._quota_callback(remaining, limit)
 
