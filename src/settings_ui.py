@@ -107,110 +107,40 @@ class SettingsWindow:
         y = (self._window.winfo_screenheight() - 620) // 2
         self._window.geometry(f"+{x}+{y}")
 
-        # Apply system theme
+        # Apply Sun Valley theme (Windows 11 native look)
         self._is_dark = False
         try:
+            import sv_ttk
             from .translate_overlay import _get_theme
             T = _get_theme()
             self._is_dark = T is not None and T.get("bg", "#f3f3f3") == "#191919"
-        except Exception:
+            sv_ttk.set_theme("dark" if self._is_dark else "light")
+
+            # Dark title bar on Windows 11
+            if self._is_dark:
+                self._window.update()
+                try:
+                    import ctypes
+                    hwnd = ctypes.windll.user32.GetParent(self._window.winfo_id())
+                    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                    value = ctypes.c_int(1)
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        ctypes.byref(value), ctypes.sizeof(value))
+                except Exception:
+                    pass
+        except ImportError:
             pass
 
+        # Colors for manually created tk widgets (hints, usage labels)
         if self._is_dark:
-            BG = "#202020"       # Windows 11 Settings background
-            BG2 = "#2d2d2d"      # card/surface
-            FG = "#ffffff"       # primary text
-            FG2 = "#9e9e9e"      # secondary text
-            FIELD = "#2d2d2d"    # input field
-            BORDER_C = "#383838" # subtle border
-            SELECT = "#0078d4"   # Windows accent blue
-
-            self._window.configure(bg=BG)
-
-            # Enable Windows dark title bar
-            try:
-                import ctypes
-                hwnd = ctypes.windll.user32.GetForegroundWindow()
-                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-                value = ctypes.c_int(1)
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                    ctypes.byref(value), ctypes.sizeof(value))
-            except Exception:
-                pass
-
-            style = ttk.Style(self._window)
-            style.theme_use("clam")
-
-            # Base
-            style.configure(".", background=BG, foreground=FG,
-                             fieldbackground=FIELD, bordercolor=BORDER_C,
-                             darkcolor=BG, lightcolor=BG2,
-                             selectbackground=SELECT, selectforeground="#ffffff",
-                             troughcolor=BG, arrowcolor=FG)
-
-            # Frames & Labels
-            style.configure("TFrame", background=BG)
-            style.configure("TLabelframe", background=BG, foreground=FG)
-            style.configure("TLabelframe.Label", background=BG, foreground=FG)
-            style.configure("TLabel", background=BG, foreground=FG)
-
-            # Notebook
-            style.configure("TNotebook", background=BG, borderwidth=0)
-            style.configure("TNotebook.Tab", background=BORDER_C, foreground=FG,
-                             padding=[12, 6])
-            style.map("TNotebook.Tab",
-                       background=[("selected", BG2), ("active", "#353535"), ("!selected", BORDER_C)],
-                       foreground=[("selected", "#ffffff"), ("active", "#ffffff")])
-
-            # Buttons
-            style.configure("TButton", background=BG2, foreground=FG,
-                             bordercolor=BORDER_C, padding=[8, 4])
-            style.map("TButton",
-                       background=[("active", "#3d3d3d"), ("pressed", "#353535")],
-                       foreground=[("active", FG)])
-
-            # Entry & Combobox
-            style.configure("TEntry", fieldbackground=FIELD, foreground=FG,
-                             bordercolor=BORDER_C, insertcolor=FG)
-            style.map("TEntry",
-                       bordercolor=[("focus", SELECT)],
-                       lightcolor=[("focus", SELECT)])
-            style.configure("TCombobox", fieldbackground=FIELD, foreground=FG,
-                             bordercolor=BORDER_C, arrowcolor=FG)
-            style.map("TCombobox",
-                       fieldbackground=[("readonly", FIELD), ("readonly focus", FIELD)],
-                       bordercolor=[("focus", SELECT)],
-                       arrowcolor=[("active", FG)])
-            # Combobox dropdown (Listbox) — requires option_add
-            self._window.option_add("*TCombobox*Listbox.background", FIELD)
-            self._window.option_add("*TCombobox*Listbox.foreground", FG)
-            self._window.option_add("*TCombobox*Listbox.selectBackground", SELECT)
-
-            # Checkbutton
-            style.configure("TCheckbutton", background=BG, foreground=FG,
-                             indicatorcolor=FIELD, indicatorbackground=FIELD)
-            style.map("TCheckbutton",
-                       background=[("active", BG), ("hover", BG)],
-                       foreground=[("active", FG), ("hover", FG)],
-                       indicatorcolor=[("selected", SELECT), ("selected active", SELECT)])
-
-            # Scale / Slider
-            style.configure("TScale", background=BG, troughcolor=BORDER_C,
-                             sliderrelief="flat")
-            style.configure("Horizontal.TScale", background=BG)
-
-            # Separator
-            style.configure("TSeparator", background=BORDER_C)
-
-            # Scrollbar
-            style.configure("TScrollbar", background=BG2, troughcolor=BG,
-                             bordercolor=BG, arrowcolor=FG)
-
-            # Store colors for tk.Label/tk.Frame created manually
-            self._dark_bg = BG
-            self._dark_fg = FG
-            self._dark_fg2 = FG2
+            self._dark_bg = "#1c1c1c"
+            self._dark_fg = "#ffffff"
+            self._dark_fg2 = "#9e9e9e"
+        else:
+            self._dark_bg = None
+            self._dark_fg = None
+            self._dark_fg2 = "#888888"
 
         # Always on top
         self._window.attributes("-topmost", True)

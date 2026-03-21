@@ -13,6 +13,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config.yaml', '.'),
+        ('.venv312/Lib/site-packages/sv_ttk', 'sv_ttk'),
     ],
     hiddenimports=[
         'pystray._win32',
@@ -44,6 +45,7 @@ a = Analysis(
         'tkinter.ttk',
         'tkinter.messagebox',
         '_tkinter',
+        'sv_ttk',
     ],
     hookspath=[],
     hooksconfig={},
