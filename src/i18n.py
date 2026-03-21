@@ -192,6 +192,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Sent: session counts, latency, model names, hallucination rates, crash logs, and recognition triads (raw/normalized/edited text). No audio or API keys.",
         "uk": "Надсилається: кількість сесій, затримки, назви моделей, частота галюцинацій, логи збоїв та тріади розпізнавання (розпізнано/нормалізовано/виправлено). Без аудіо та API ключів.",
     },
+    "settings.theme": {
+        "en": "Translate theme:",
+        "uk": "Тема перекладача:",
+    },
     "settings.autostart": {
         "en": "Start with Windows",
         "uk": "Запускати з Windows",

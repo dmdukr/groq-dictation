@@ -370,6 +370,14 @@ class SettingsWindow:
         ], state="readonly")
         ui_lang_combo.grid(row=11, column=1, sticky="w", padx=(8, 0), pady=(12, 4))
 
+        # Translate theme selector
+        ttk.Label(tab_dict, text=t("settings.theme")).grid(row=12, column=0, sticky="w", pady=4)
+        self._theme_var = tk.StringVar(master=self._window, value=self._load_theme())
+        theme_combo = ttk.Combobox(tab_dict, textvariable=self._theme_var, width=15, values=[
+            "auto", "light", "dark",
+        ], state="readonly")
+        theme_combo.grid(row=12, column=1, sticky="w", padx=(8, 0), pady=4)
+
         tab_dict.columnconfigure(1, weight=1)
 
         # --- Tab 4: Telemetry ---
@@ -653,6 +661,19 @@ class SettingsWindow:
         except Exception as e:
             logger.error(f"Failed to save .env: {e}")
 
+    def _load_theme(self) -> str:
+        """Load theme preference from translate_settings.json."""
+        from .config import APP_DIR
+        settings_file = APP_DIR / "translate_settings.json"
+        try:
+            if settings_file.exists():
+                import json
+                data = json.loads(settings_file.read_text(encoding="utf-8"))
+                return data.get("theme", "auto")
+        except Exception:
+            pass
+        return "auto"
+
     def _load_deepl_keys(self) -> list[str]:
         """Load DeepL API keys from translate_settings.json."""
         from .config import APP_DIR
@@ -681,7 +702,8 @@ class SettingsWindow:
             keys = [v.get().strip() for v in self._deepl_key_vars]
             data["deepl_keys"] = [k for k in keys if k]
             data.pop("deepl_key", None)  # remove legacy single key
+            data["theme"] = self._theme_var.get()
             settings_file.write_text(json.dumps(data), encoding="utf-8")
-            logger.info("DeepL keys saved (%d)", len(data["deepl_keys"]))
+            logger.info("DeepL keys saved (%d), theme=%s", len(data["deepl_keys"]), data["theme"])
         except Exception as e:
             logger.warning(f"Failed to save DeepL keys: {e}")

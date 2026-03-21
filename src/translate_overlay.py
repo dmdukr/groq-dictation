@@ -19,21 +19,70 @@ from .i18n import t
 
 logger = logging.getLogger(__name__)
 
-# ── Color Scheme (Pastel Glass) ───────────────────────────────────────
+# ── Color Themes ──────────────────────────────────────────────────────
 
-NAVY = "#b8c5d6"             # pastel blue-grey header
-NAVY_LIGHT = "#c8d3e0"       # header hover
-BG_PAGE = "#f5f0f0"          # warm blush background
-BG_CARD = "#faf7f5"          # warm white card
-TEXT_DARK = "#4a4a5a"        # soft charcoal text
-TEXT_MID = "#8e8ea0"         # muted lavender text
-TEXT_LIGHT = "#b8b8c8"       # dimmed text
-ACCENT = "#e8b4a0"           # soft peach (buttons)
-ACCENT_HOVER = "#d4a090"     # deeper peach hover
-SUCCESS = "#a8d8c8"          # soft mint
-DANGER = "#e8a0a0"           # soft coral
-INFO = "#a0c4e8"             # soft sky
-BORDER = "#e8e0e0"           # blush border
+THEME_LIGHT = {
+    "header": "#f0f0f0",         # Windows light title bar
+    "header_text": "#1a1a1a",
+    "bg": "#f3f3f3",             # Windows light background
+    "card": "#ffffff",           # white card
+    "card_input": "#f9f9f9",     # light grey text area (like Windows input)
+    "text": "#1a1a1a",           # primary text
+    "text_mid": "#666666",       # secondary
+    "text_dim": "#999999",       # dimmed
+    "accent": "#0078d4",         # Windows blue accent
+    "accent_hover": "#106ebe",
+    "success": "#107c10",        # Windows green
+    "danger": "#d13438",         # Windows red
+    "info": "#0078d4",           # Windows blue
+    "border": "#e5e5e5",         # Windows border
+    "btn_text": "#ffffff",
+}
+
+THEME_DARK = {
+    "header": "#202020",         # Windows dark title bar (Explorer)
+    "header_text": "#ffffff",
+    "bg": "#191919",             # Windows dark background
+    "card": "#2d2d2d",           # dark card (Explorer panels)
+    "card_input": "#1e1e1e",     # dark input area
+    "text": "#ffffff",           # primary text
+    "text_mid": "#999999",       # secondary
+    "text_dim": "#666666",       # dimmed
+    "accent": "#4cc2ff",         # Windows dark blue accent
+    "accent_hover": "#2eaadc",
+    "success": "#6ccb5f",        # green
+    "danger": "#ff6b6b",         # red
+    "info": "#4cc2ff",           # blue
+    "border": "#3d3d3d",         # dark border
+    "btn_text": "#1a1a1a",
+}
+
+
+def _detect_windows_theme() -> str:
+    """Detect Windows light/dark theme from registry. Returns 'light' or 'dark'."""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        )
+        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        winreg.CloseKey(key)
+        return "light" if val == 1 else "dark"
+    except Exception:
+        return "light"
+
+
+def _get_theme() -> dict:
+    """Get active theme dict based on user setting (auto/light/dark)."""
+    settings = _load_settings()
+    pref = settings.get("theme", "auto")
+    if pref == "light":
+        return THEME_LIGHT
+    elif pref == "dark":
+        return THEME_DARK
+    else:  # auto
+        return THEME_LIGHT if _detect_windows_theme() == "light" else THEME_DARK
 
 # ── Languages ─────────────────────────────────────────────────────────
 
@@ -113,11 +162,14 @@ class TranslateOverlay:
 
     def _build_and_run(self) -> None:
         try:
+            # Get theme (auto/light/dark)
+            T = _get_theme()
+
             root = tk.Tk()
             self._window = root
             root.title("Groq Translate")
             root.attributes("-topmost", True)
-            root.configure(bg=BG_PAGE)
+            root.configure(bg=T["bg"])
             root.minsize(450, 350)
 
             # Load saved size
@@ -141,59 +193,54 @@ class TranslateOverlay:
 
             root.protocol("WM_DELETE_WINDOW", on_close)
 
-            # ── Header (navy bar) ───────────────────────────────────
-            header = tk.Frame(root, bg=NAVY, height=48)
+            # ── Header ──────────────────────────────────────────────
+            header = tk.Frame(root, bg=T["header"], height=48)
             header.pack(fill="x")
             header.pack_propagate(False)
 
             tk.Label(
                 header, text="\u2630  Groq Translate",
-                fg=TEXT_DARK, bg=NAVY, font=("Segoe UI", 12, "bold"),
+                fg=T["header_text"], bg=T["header"], font=("Segoe UI", 12, "bold"),
                 padx=16,
             ).pack(side="left")
 
-            # Header buttons (right side)
-            btn_frame = tk.Frame(header, bg=NAVY)
+            # Header buttons
+            btn_frame = tk.Frame(header, bg=T["header"])
             btn_frame.pack(side="right", padx=8)
 
-            # Replace button
             replace_btn = tk.Label(
                 btn_frame, text="  \u21c4 Replace  ",
-                fg=TEXT_DARK, bg=ACCENT, font=("Segoe UI", 9, "bold"),
+                fg=T["btn_text"], bg=T["accent"], font=("Segoe UI", 9, "bold"),
                 cursor="hand2", padx=10, pady=6,
             )
             replace_btn.pack(side="left", padx=(0, 8), pady=8)
-            replace_btn.bind("<Enter>", lambda e: replace_btn.config(bg=ACCENT_HOVER))
-            replace_btn.bind("<Leave>", lambda e: replace_btn.config(bg=ACCENT))
+            replace_btn.bind("<Enter>", lambda e: replace_btn.config(bg=T["accent_hover"]))
+            replace_btn.bind("<Leave>", lambda e: replace_btn.config(bg=T["accent"]))
 
-            # Copy button
             copy_btn = tk.Label(
                 btn_frame, text="  \u2398 Copy  ",
-                fg=TEXT_DARK, bg=INFO, font=("Segoe UI", 9, "bold"),
+                fg=T["btn_text"], bg=T["info"], font=("Segoe UI", 9, "bold"),
                 cursor="hand2", padx=10, pady=6,
             )
             copy_btn.pack(side="left", padx=(0, 8), pady=8)
-            copy_btn.bind("<Enter>", lambda e: copy_btn.config(bg="#90b8d8"))
-            copy_btn.bind("<Leave>", lambda e: copy_btn.config(bg=INFO))
+            copy_btn.bind("<Enter>", lambda e: copy_btn.config(bg=T["accent_hover"]))
+            copy_btn.bind("<Leave>", lambda e: copy_btn.config(bg=T["info"]))
 
-            # ── Toolbar (language selector) ─────────────────────────
-            toolbar = tk.Frame(root, bg=BG_PAGE, padx=16, pady=10)
+            # ── Toolbar ─────────────────────────────────────────────
+            toolbar = tk.Frame(root, bg=T["bg"], padx=16, pady=10)
             toolbar.pack(fill="x")
 
             tk.Label(
                 toolbar, text="Translate to:",
-                fg=TEXT_MID, bg=BG_PAGE, font=("Segoe UI", 10),
+                fg=T["text_mid"], bg=T["bg"], font=("Segoe UI", 10),
             ).pack(side="left")
 
             lang_var = tk.StringVar()
             lang_names = [name for name, code in LANGUAGES]
 
-            style = ttk.Style()
-            style.configure("Translate.TCombobox", padding=4)
-
             lang_combo = ttk.Combobox(
                 toolbar, textvariable=lang_var, values=lang_names,
-                width=14, state="readonly", style="Translate.TCombobox",
+                width=14, state="readonly",
             )
             for i, (name, code) in enumerate(LANGUAGES):
                 if code == self._target_lang:
@@ -201,69 +248,68 @@ class TranslateOverlay:
                     break
             lang_combo.pack(side="left", padx=(8, 0))
 
-            # Engine indicator
             engine_var = tk.StringVar(value="")
             tk.Label(
                 toolbar, textvariable=engine_var,
-                fg=TEXT_LIGHT, bg=BG_PAGE, font=("Segoe UI", 8),
+                fg=T["text_dim"], bg=T["bg"], font=("Segoe UI", 8),
             ).pack(side="right")
 
-            # ── Content area ────────────────────────────────────────
-            content = tk.Frame(root, bg=BG_PAGE, padx=16)
+            # ── Content ─────────────────────────────────────────────
+            content = tk.Frame(root, bg=T["bg"], padx=16)
             content.pack(fill="both", expand=True)
 
             # Source card
-            src_card = tk.Frame(content, bg=BG_CARD, bd=1, relief="solid",
-                                highlightbackground=BORDER, highlightthickness=1)
+            src_card = tk.Frame(content, bg=T["card"], bd=1, relief="solid",
+                                highlightbackground=T["border"], highlightthickness=1)
             src_card.pack(fill="x", pady=(0, 8))
 
-            src_header = tk.Frame(src_card, bg=BG_CARD)
+            src_header = tk.Frame(src_card, bg=T["card"])
             src_header.pack(fill="x", padx=12, pady=(8, 0))
             tk.Label(
                 src_header, text="ORIGINAL",
-                fg=TEXT_LIGHT, bg=BG_CARD, font=("Segoe UI", 8, "bold"),
+                fg=T["text_dim"], bg=T["card"], font=("Segoe UI", 8, "bold"),
             ).pack(side="left")
 
             src_text = tk.Text(
                 src_card, height=4, wrap="word",
-                fg=TEXT_MID, bg=BG_CARD, font=("Segoe UI", 10),
+                fg=T["text_mid"], bg=T["card_input"], font=("Segoe UI", 10),
                 borderwidth=0, highlightthickness=0, padx=12, pady=8,
-                selectbackground=INFO,
+                selectbackground=T["accent"],
             )
             src_text.insert("1.0", self._source_text[:2000])
             src_text.config(state="disabled")
             src_text.pack(fill="x")
 
             # Translation card
-            result_card = tk.Frame(content, bg=BG_CARD, bd=1, relief="solid",
-                                   highlightbackground=BORDER, highlightthickness=1)
+            result_card = tk.Frame(content, bg=T["card"], bd=1, relief="solid",
+                                   highlightbackground=T["border"], highlightthickness=1)
             result_card.pack(fill="both", expand=True, pady=(0, 8))
 
-            result_header = tk.Frame(result_card, bg=BG_CARD)
+            result_header = tk.Frame(result_card, bg=T["card"])
             result_header.pack(fill="x", padx=12, pady=(8, 0))
             tk.Label(
                 result_header, text="TRANSLATION",
-                fg=TEXT_LIGHT, bg=BG_CARD, font=("Segoe UI", 8, "bold"),
+                fg=T["text_dim"], bg=T["card"], font=("Segoe UI", 8, "bold"),
             ).pack(side="left")
 
             result_text = tk.Text(
                 result_card, wrap="word",
-                fg=TEXT_DARK, bg=BG_CARD, font=("Segoe UI", 11),
+                fg=T["text"], bg=T["card_input"], font=("Segoe UI", 11),
                 borderwidth=0, highlightthickness=0, padx=12, pady=8,
-                selectbackground=INFO,
+                selectbackground=T["accent"],
             )
             result_text.insert("1.0", t("translate.loading"))
             result_text.config(state="disabled")
             result_text.pack(fill="both", expand=True)
 
             # ── Status bar ──────────────────────────────────────────
-            status_frame = tk.Frame(root, bg=BG_PAGE, padx=16)
+            status_frame = tk.Frame(root, bg=T["bg"], padx=16)
             status_frame.pack(fill="x", pady=(0, 8))
 
             status_var = tk.StringVar(value="")
             tk.Label(
                 status_frame, textvariable=status_var,
-                fg=TEXT_LIGHT, bg=BG_PAGE, font=("Segoe UI", 8), anchor="w",
+                fg=T["text_dim"], bg=T["bg"], font=("Segoe UI", 8), anchor="w",
             ).pack(side="left")
 
             # ── Handlers ────────────────────────────────────────────
@@ -275,8 +321,8 @@ class TranslateOverlay:
                 if text and text != t("translate.loading"):
                     pyperclip.copy(text)
                     status_var.set("\u2713 " + t("translate.copied"))
-                    copy_btn.config(bg=SUCCESS)
-                    root.after(2000, lambda: copy_btn.config(bg=INFO))
+                    copy_btn.config(bg=T["success"])
+                    root.after(2000, lambda: copy_btn.config(bg=T["info"]))
 
             copy_btn.bind("<Button-1>", do_copy)
 
