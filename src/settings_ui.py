@@ -150,51 +150,19 @@ class SettingsWindow:
         notebook = ttk.Notebook(self._window)
         notebook.pack(fill="both", expand=True, padx=8, pady=(8, 0))
 
-        # --- Tab 1: Groq API ---
-        tab_api = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_api, text=f"  {t('settings.tab_api')}  ")
+        # --- Tab 1: STT Providers ---
+        tab_stt = ttk.Frame(notebook, padding=8)
+        notebook.add(tab_stt, text=f"  {t('settings.tab_stt')}  ")
+        self._stt_slots = self._build_provider_slots(tab_stt, self._config.providers.stt, stt=True)
 
-        ttk.Label(tab_api, text=t("settings.api_key")).grid(row=0, column=0, sticky="w", pady=4)
-        self._api_key_var = tk.StringVar(master=self._window, value=self._config.groq.api_key)
-        api_entry = ttk.Entry(tab_api, textvariable=self._api_key_var, width=55, show="*")
-        api_entry.grid(row=0, column=1, sticky="we", pady=4, padx=(8, 0))
+        # Languages (for STT)
+        lang_sep = ttk.Separator(tab_stt, orient="horizontal")
+        lang_sep.pack(fill="x", pady=(8, 4))
 
-        self._show_key_var = tk.BooleanVar(master=self._window, value=False)
-        ttk.Checkbutton(
-            tab_api, text=t("settings.show_key"), variable=self._show_key_var,
-            command=lambda: api_entry.config(show="" if self._show_key_var.get() else "*"),
-        ).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(tab_stt, text=t("settings.language"), font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        lang_frame = ttk.Frame(tab_stt)
+        lang_frame.pack(fill="x", pady=(4, 0))
 
-        # API key hint
-        hint_label = ttk.Label(
-            tab_api, text=t("settings.api_hint"),
-            foreground="#888888",
-            font=("Segoe UI", 8), wraplength=400,
-        )
-        hint_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
-
-        ttk.Label(tab_api, text=t("settings.stt_model")).grid(row=3, column=0, sticky="w", pady=4)
-        self._stt_model_var = tk.StringVar(master=self._window, value=self._config.groq.stt_model)
-        stt_combo = ttk.Combobox(tab_api, textvariable=self._stt_model_var, width=35, values=[
-            "whisper-large-v3-turbo",
-            "whisper-large-v3",
-        ])
-        stt_combo.grid(row=3, column=1, sticky="w", pady=4, padx=(8, 0))
-
-        ttk.Label(tab_api, text=t("settings.llm_model")).grid(row=4, column=0, sticky="w", pady=4)
-        self._llm_model_var = tk.StringVar(master=self._window, value=self._config.groq.llm_model)
-        llm_combo = ttk.Combobox(tab_api, textvariable=self._llm_model_var, width=35, values=[
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant",
-            "gemma2-9b-it",
-        ])
-        llm_combo.grid(row=4, column=1, sticky="w", pady=4, padx=(8, 0))
-
-        ttk.Label(tab_api, text=t("settings.language")).grid(row=5, column=0, sticky="nw", pady=4)
-        lang_frame = ttk.Frame(tab_api)
-        lang_frame.grid(row=5, column=1, sticky="w", padx=(8, 0), pady=4)
-
-        # All Whisper-supported languages
         self._all_languages = [
             ("uk", "Українська"), ("ru", "Русский"), ("en", "English"),
             ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
@@ -202,8 +170,6 @@ class SettingsWindow:
             ("nl", "Nederlands"), ("tr", "Türkçe"), ("cs", "Čeština"),
             ("ja", "日本語"), ("zh", "中文"), ("ko", "한국어"),
         ]
-
-        # Parse current language config (comma-separated or single)
         current_langs = set()
         if self._config.groq.stt_language:
             current_langs = {lc.strip() for lc in self._config.groq.stt_language.split(",")}
@@ -212,48 +178,58 @@ class SettingsWindow:
         for i, (code, name) in enumerate(self._all_languages):
             var = tk.BooleanVar(master=self._window, value=(code in current_langs) if current_langs else False)
             self._lang_vars[code] = var
-            col = i % 3
-            row = i // 3
-            ttk.Checkbutton(lang_frame, text=f"{name}", variable=var).grid(
-                row=row, column=col, sticky="w", padx=(0, 12),
+            col = i % 5
+            row = i // 5
+            ttk.Checkbutton(lang_frame, text=name, variable=var).grid(
+                row=row, column=col, sticky="w", padx=(0, 8),
             )
 
-        ttk.Label(tab_api, text=t("settings.language_hint"),
-                  foreground="gray").grid(row=6, column=0, columnspan=2, sticky="w", padx=(0, 0))
+        # --- Tab 2: LLM Normalization ---
+        tab_llm = ttk.Frame(notebook, padding=8)
+        notebook.add(tab_llm, text=f"  {t('settings.tab_llm')}  ")
+        self._llm_slots = self._build_provider_slots(tab_llm, self._config.providers.llm, stt=False)
 
-        # DeepL API keys (for translate feature, rotation across 5 keys)
-        ttk.Separator(tab_api, orient="horizontal").grid(
-            row=7, column=0, columnspan=2, sticky="we", pady=(12, 4))
+        self._normalize_var = tk.BooleanVar(master=self._window, value=self._config.normalization.enabled)
+        ttk.Checkbutton(tab_llm, text=t("settings.normalize_check"),
+                        variable=self._normalize_var).pack(anchor="w", pady=(8, 0))
 
-        ttk.Label(tab_api, text=t("settings.deepl_key")).grid(row=8, column=0, sticky="nw", pady=4)
+        # --- Tab 3: Translation ---
+        tab_trans = ttk.Frame(notebook, padding=8)
+        notebook.add(tab_trans, text=f"  {t('settings.tab_translation')}  ")
+        self._trans_slots = self._build_provider_slots(tab_trans, self._config.providers.translation, stt=False)
 
-        deepl_frame = ttk.Frame(tab_api)
-        deepl_frame.grid(row=8, column=1, sticky="we", pady=4, padx=(8, 0))
+        # DeepL keys section
+        ttk.Separator(tab_trans, orient="horizontal").pack(fill="x", pady=(8, 4))
+        ttk.Label(tab_trans, text="DeepL API Keys", font=("Segoe UI", 9, "bold")).pack(anchor="w")
 
-        saved_keys = load_deepl_keys()
+        deepl_frame = ttk.Frame(tab_trans)
+        deepl_frame.pack(fill="x", pady=(4, 0))
+
+        saved_deepl = load_deepl_keys()
         self._deepl_key_vars = []
         self._deepl_entries = []
         self._deepl_usage_labels = []
         for i in range(5):
-            val = saved_keys[i] if i < len(saved_keys) else ""
+            val = saved_deepl[i] if i < len(saved_deepl) else ""
             var = tk.StringVar(master=self._window, value=val)
             self._deepl_key_vars.append(var)
-            entry = ttk.Entry(deepl_frame, textvariable=var, width=42, show="*")
-            entry.grid(row=i, column=0, sticky="we", pady=1)
+            row_frame = ttk.Frame(deepl_frame)
+            row_frame.pack(fill="x", pady=1)
+            entry = ttk.Entry(row_frame, textvariable=var, width=42, show="*")
+            entry.pack(side="left", fill="x", expand=True)
             self._deepl_entries.append(entry)
             usage_label = tk.Label(
-                deepl_frame, text="",
+                row_frame, text="",
                 fg=self._dark_fg2 if self._is_dark else "#888888",
-                bg=self._dark_bg if self._is_dark else deepl_frame.winfo_toplevel().cget("bg"),
+                bg=self._dark_bg if self._is_dark else row_frame.winfo_toplevel().cget("bg"),
                 font=("Segoe UI", 8), width=12, anchor="w",
             )
-            usage_label.grid(row=i, column=1, padx=(4, 0))
+            usage_label.pack(side="left", padx=(4, 0))
             self._deepl_usage_labels.append(usage_label)
-        deepl_frame.columnconfigure(0, weight=1)
 
-        # Fetch usage for filled keys in background
-        def _fetch_usage():
-            for i, key in enumerate(saved_keys):
+        # Fetch DeepL usage in background
+        def _fetch_deepl_usage():
+            for i, key in enumerate(saved_deepl):
                 if not key.strip():
                     continue
                 try:
@@ -274,28 +250,14 @@ class SettingsWindow:
                             self._deepl_usage_labels[i].config(text="invalid", fg="#e74c3c")
                 except Exception:
                     self._deepl_usage_labels[i].config(text="error", fg="#e74c3c")
+        threading.Thread(target=_fetch_deepl_usage, daemon=True).start()
 
-        threading.Thread(target=_fetch_usage, daemon=True).start()
-
-        # Show/hide DeepL keys
         self._show_deepl_var = tk.BooleanVar(master=self._window, value=False)
-        ttk.Checkbutton(
-            tab_api, text=t("settings.show_key"), variable=self._show_deepl_var,
-            command=lambda: [e.config(show="" if self._show_deepl_var.get() else "*")
-                             for e in self._deepl_entries],
-        ).grid(row=9, column=1, sticky="w", padx=(8, 0))
+        ttk.Checkbutton(tab_trans, text=t("settings.show_key"), variable=self._show_deepl_var,
+                        command=lambda: [e.config(show="" if self._show_deepl_var.get() else "*")
+                                         for e in self._deepl_entries]).pack(anchor="w")
 
-        hint_dl = tk.Label(
-            tab_api, text=t("settings.deepl_hint"),
-            fg=self._dark_fg2 if self._is_dark else "#888888",
-            bg=self._dark_bg if self._is_dark else tab_api.winfo_toplevel().cget("bg"),
-            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
-        )
-        hint_dl.grid(row=10, column=0, columnspan=2, sticky="w", pady=(0, 4))
-
-        tab_api.columnconfigure(1, weight=1)
-
-        # --- Tab 2: Audio ---
+        # --- Tab 4: Audio ---
         tab_audio = ttk.Frame(notebook, padding=12)
         notebook.add(tab_audio, text=f"  {t('settings.tab_audio')}  ")
 
@@ -454,6 +416,117 @@ class SettingsWindow:
 
     # --- Hotkey capture (uses `keyboard` library to detect all keys incl. Win) ---
 
+    # ── Provider slot builder ─────────────────────────────────────────
+
+    def _build_provider_slots(self, parent, slots_config: list[dict], stt: bool = False) -> list[dict]:
+        """Build 3 provider slots UI in the given parent frame.
+
+        Args:
+            parent: ttk.Frame to build in.
+            slots_config: list of 3 slot dicts from config.
+            stt: If True, filter models for STT (whisper); else for LLM.
+
+        Returns:
+            list of 3 dicts with tk vars: {api_key_var, provider_var, model_var, usage_label}
+        """
+        from .providers import detect_provider, fetch_models, get_provider_base_url, ALL_STT_PROVIDERS, ALL_LLM_PROVIDERS
+
+        # Hint
+        ttk.Label(parent, text=t("settings.provider_fallback_hint"),
+                  foreground="#888888", font=("Segoe UI", 8)).pack(anchor="w", pady=(0, 8))
+
+        slot_widgets = []
+        provider_list = ALL_STT_PROVIDERS if stt else ALL_LLM_PROVIDERS
+
+        for idx in range(3):
+            slot_data = slots_config[idx] if idx < len(slots_config) else {}
+
+            frame = ttk.LabelFrame(parent, text=f"  #{idx + 1}  ", padding=6)
+            frame.pack(fill="x", pady=(0, 6))
+
+            # Row 1: API Key
+            key_frame = ttk.Frame(frame)
+            key_frame.pack(fill="x")
+
+            api_var = tk.StringVar(master=self._window, value=slot_data.get("api_key", ""))
+            key_entry = ttk.Entry(key_frame, textvariable=api_var, width=48, show="*")
+            key_entry.pack(side="left", fill="x", expand=True)
+
+            usage_label = tk.Label(
+                key_frame, text=t("settings.provider_not_connected"),
+                fg=self._dark_fg2 if self._is_dark else "#888888",
+                bg=self._dark_bg if self._is_dark else key_frame.winfo_toplevel().cget("bg"),
+                font=("Segoe UI", 8), anchor="e", width=16,
+            )
+            usage_label.pack(side="right", padx=(4, 0))
+
+            # Row 2: Provider dropdown + Model dropdown
+            row2 = ttk.Frame(frame)
+            row2.pack(fill="x", pady=(4, 0))
+
+            provider_var = tk.StringVar(master=self._window, value=slot_data.get("provider", ""))
+            provider_combo = ttk.Combobox(row2, textvariable=provider_var, values=provider_list,
+                                          width=18, state="readonly")
+            provider_combo.pack(side="left")
+
+            model_var = tk.StringVar(master=self._window, value=slot_data.get("model", ""))
+            model_combo = ttk.Combobox(row2, textvariable=model_var, width=30)
+            model_combo.pack(side="left", padx=(8, 0), fill="x", expand=True)
+
+            # Auto-detect provider when API key changes
+            def _on_key_change(var=api_var, pvar=provider_var, mcombo=model_combo,
+                               mvar=model_var, ulabel=usage_label, is_stt=stt):
+                key = var.get().strip()
+                if not key:
+                    pvar.set("")
+                    mcombo["values"] = []
+                    mvar.set("")
+                    ulabel.config(text=t("settings.provider_not_connected"))
+                    return
+                info = detect_provider(key)
+                if info:
+                    pvar.set(info.name)
+                    # Fetch models in background
+                    def _fetch(base=info.base_url, k=key):
+                        models = fetch_models(base, k, stt=is_stt)
+                        if models and self._window:
+                            self._window.after(0, lambda: mcombo.config(values=models))
+                            if not mvar.get() and models:
+                                self._window.after(0, lambda: mvar.set(models[0]))
+                            self._window.after(0, lambda: ulabel.config(
+                                text=info.name, fg="#27ae60"))
+                        elif self._window:
+                            self._window.after(0, lambda: ulabel.config(
+                                text=info.name, fg=self._dark_fg2 or "#888888"))
+                    threading.Thread(target=_fetch, daemon=True).start()
+
+            api_var.trace_add("write", lambda *_, fn=_on_key_change: fn())
+
+            # Init: if key already set, trigger detection
+            if api_var.get().strip():
+                self._window.after(100 + idx * 200, _on_key_change)
+
+            slot_widgets.append({
+                "api_key_var": api_var,
+                "provider_var": provider_var,
+                "model_var": model_var,
+                "usage_label": usage_label,
+            })
+
+        # Show/hide keys
+        show_var = tk.BooleanVar(master=self._window, value=False)
+        entries = [w for f in parent.winfo_children()
+                   if isinstance(f, ttk.LabelFrame)
+                   for w in f.winfo_children()
+                   if isinstance(w, ttk.Frame)
+                   for w in w.winfo_children()
+                   if isinstance(w, ttk.Entry)]
+        ttk.Checkbutton(parent, text=t("settings.show_key"), variable=show_var,
+                        command=lambda: [e.config(show="" if show_var.get() else "*")
+                                         for e in entries]).pack(anchor="w")
+
+        return slot_widgets
+
     def _start_hotkey_capture(self) -> None:
         """Enter hotkey recording mode using keyboard library for Win key support."""
         self._record_btn.config(text="Press keys...", state="disabled")
@@ -557,11 +630,52 @@ class SettingsWindow:
 
     def _save(self) -> None:
         """Save settings to config and YAML file."""
-        # Groq
-        self._config.groq.api_key = self._api_key_var.get().strip()
-        self._config.groq.stt_model = self._stt_model_var.get().strip()
-        self._config.groq.llm_model = self._llm_model_var.get().strip()
-        # Languages: comma-separated selected codes, or None for auto
+        from .provider_manager import ProviderManager
+        from .providers import detect_provider, get_provider_base_url
+
+        # Provider slots → config
+        def _read_slots(slot_widgets):
+            result = []
+            for sw in slot_widgets:
+                key = sw["api_key_var"].get().strip()
+                provider = sw["provider_var"].get().strip()
+                model = sw["model_var"].get().strip()
+                base_url = ""
+                if key:
+                    info = detect_provider(key)
+                    if info:
+                        base_url = info.base_url
+                    elif provider:
+                        base_url = get_provider_base_url(provider)
+                result.append({"api_key": key, "provider": provider,
+                               "base_url": base_url, "model": model})
+            return result
+
+        self._config.providers.stt = _read_slots(self._stt_slots)
+        self._config.providers.llm = _read_slots(self._llm_slots)
+        self._config.providers.translation = _read_slots(self._trans_slots)
+
+        # Check for duplicate keys
+        for name, slots in [("STT", self._config.providers.stt),
+                            ("LLM", self._config.providers.llm),
+                            ("Translation", self._config.providers.translation)]:
+            warnings = ProviderManager.check_duplicate_keys(slots)
+            if warnings:
+                from tkinter import messagebox
+                messagebox.showwarning(
+                    t("settings.duplicate_key_warning"),
+                    f"{name}: {'; '.join(warnings)}",
+                )
+                return  # Don't save
+
+        # Backward compat: copy first STT key to groq config
+        if self._config.providers.stt[0].get("api_key"):
+            self._config.groq.api_key = self._config.providers.stt[0]["api_key"]
+            self._config.groq.stt_model = self._config.providers.stt[0].get("model", "whisper-large-v3-turbo")
+        if self._config.providers.llm[0].get("api_key"):
+            self._config.groq.llm_model = self._config.providers.llm[0].get("model", "llama-3.3-70b-versatile")
+
+        # Languages
         selected_langs = [code for code, var in self._lang_vars.items() if var.get()]
         self._config.groq.stt_language = ",".join(selected_langs) if selected_langs else None
 
