@@ -1,349 +1,306 @@
-# Groq Dictation — Windows Speech-to-Text Service
+# AI Polyglot Kit — Multi-Provider Voice AI for Windows
 
-System-wide dictation for Windows using Groq Whisper API with AI-powered text normalization and self-learning user profile.
+System-wide dictation, text normalization, and translation for Windows — powered by 7 STT and 8+ LLM providers with automatic failover.
 
-> 🤖 Built by **dmdukr** with [Claude](https://claude.ai) (Anthropic) as AI co-author — architecture, code, and documentation were developed collaboratively.
+> Built by **dmdukr** with [Claude](https://claude.ai) (Anthropic) as AI co-author.
 
 ---
 
-*[Українська версія нижче / Ukrainian version below](#groq-dictation--windows-сервіс-голосового-введення)*
+*[Українська версія нижче / Ukrainian version below](#ai-polyglot-kit--багатосервісний-голосовий-ai-для-windows)*
 
 ---
 
 ## Features
 
+- **7 STT providers** — Groq, OpenAI, Soniox, Deepgram, Gladia, Speechmatics, AssemblyAI
+- **8+ LLM providers** — Groq, Google AI Studio, Cerebras, Mistral, OpenRouter, OpenAI, xAI, GitHub Models
+- **3-slot failover** — when provider #1 exhausts its free limit, auto-switch to #2, then #3
+- **Auto-detect provider** — paste API key → app detects the service and fetches available models
 - **Hold-to-record** — hold hotkey to record, release to stop
-- **Groq Whisper** — fast cloud STT via Groq API (free tier available)
-- **AI normalization** — two-pass LLM post-processing fixes Whisper errors, restores idioms, formats text
+- **AI normalization** — LLM post-processing fixes recognition errors, removes filler words, formats text
+- **Quick Translate** — double Ctrl+C on selected text → instant translation (DeepL or LLM)
 - **Self-learning profile** — learns from your corrections via double-tap feedback
-- **Prompt tournament** — auto-optimizes the normalization prompt (3 candidates + judge)
-- **Multilingual** — Ukrainian, English in any mix
 - **Auto-update** — checks GitHub releases, downloads and installs new versions
-- **System tray** — runs silently, shows recording overlay with waveform
-
-## How it works
-
-```
-🎤 Hold hotkey → Record speech
-    ↓
-☁️ Groq Whisper API → Raw transcription
-    ↓
-🤖 LLM Pass 1 → Fix recognition errors (uses compiled prompt from profile)
-    ↓
-🤖 LLM Pass 2 → Polish grammar
-    ↓
-⌨️ Type into active window
-    ↓
-✏️ User edits text → Double-tap hotkey → Feedback captured
-    ↓
-🧠 Profile updated → Prompt re-optimized (tournament)
-```
+- **Dark/Light theme** — follows Windows theme or manual choice
 
 ## Installation
 
-### Option 1: Installer (recommended)
-
-1. Download `GroqDictation-X.X.X-setup.exe` from [Releases](https://github.com/dmdukr/groq-dictation/releases)
+1. Download `GroqDictation-X.X.X-setup.exe` from [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
 2. Run the installer
-3. Get a free Groq API key (see [step-by-step guide](#getting-a-groq-api-key) below)
-4. On first launch, right-click the tray icon → **Settings** → paste your API key
+3. Get a free API key from any supported provider (see [Provider Guide](#stt-providers) below)
+4. Click tray icon → **Settings** → paste your API key into the STT tab
 
-> **Updating**: The app checks for new versions automatically. When an update is available, you'll see a notification — click to download and install. Your settings and profile are preserved.
->
-> **Uninstalling**: Use Windows **Settings → Apps → Groq Dictation → Uninstall**, or run the uninstaller from the install directory.
+> **Updating**: automatic — the app checks for new versions and notifies you.
 
-### Option 2: Portable
+---
 
-Download `GroqDictation.exe` from [Releases](https://github.com/dmdukr/groq-dictation/releases) — no installation needed, runs from any folder.
+## STT Providers
 
-### Option 3: From source
+Speech-to-text providers for voice recognition. Add up to 3 in Settings → STT tab.
 
-```bash
-git clone https://github.com/dmdukr/groq-dictation.git
-cd groq-dictation
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python -m src.main
+*Data as of March 2026*
+
+| # | Provider | Model | Free Tier | Languages | WER | How to Get API Key |
+|---|----------|-------|-----------|-----------|-----|-------------------|
+| 1 | **Groq** | Whisper Large V3 Turbo | **~8 h/day** (daily reset) | 99+ | 0.16% | [console.groq.com](https://console.groq.com) → Sign Up → API Keys → Create |
+| 2 | **Soniox** | stt-async-v4 | **$200 credit ≈ 2000 h** (one-time) | 60+ | Top benchmark | [soniox.com](https://soniox.com) → Sign Up → Dashboard → API Key |
+| 3 | **Deepgram** | Nova-3 | **$200 credit ≈ 330 h** (one-time) | 50+ | 0.14% | [console.deepgram.com](https://console.deepgram.com) → Sign Up → API Keys |
+| 4 | **Gladia** | Solaria-1 | **10 h/month** + $50 credit | 100+ | 0.16% | [app.gladia.io](https://app.gladia.io) → Sign Up → API Key |
+| 5 | **Speechmatics** | Enhanced (Ursa) | **8 h/month** | 50+ | 0.18% | [portal.speechmatics.com](https://portal.speechmatics.com) → Sign Up → API Key |
+| 6 | **AssemblyAI** | Universal-2 | **8 h/month** | 99 | 0.20% | [assemblyai.com](https://www.assemblyai.com) → Sign Up → Dashboard → API Key |
+| 7 | **OpenAI** | Whisper, GPT-4o-transcribe | **No free tier** ($0.006/min) | 99+ | 0.11% | [platform.openai.com](https://platform.openai.com) → API Keys |
+
+### Which STT to choose?
+
+- **Best free for daily use**: **Groq** — 8 hours/day, every day, no expiry
+- **Largest one-time credit**: **Soniox** (2000 h) or **Deepgram** (330 h)
+- **Best for mixed languages (UK/RU/EN)**: **Groq Whisper V3** or **Soniox v4** (mid-sentence language switching)
+- **Best absolute accuracy**: **OpenAI GPT-4o-transcribe** (paid only)
+
+### Recommended setup (free)
+
+| Slot | Provider | Why |
+|------|----------|-----|
+| #1 | Groq | Best daily free limit (8 h/day) |
+| #2 | Soniox | 2000 h backup, great multilingual |
+| #3 | Deepgram | 330 h backup, Nova-3 accuracy |
+
+---
+
+## LLM Providers
+
+LLM providers for text normalization (fixing recognition errors) and translation. Add up to 3 in Settings → Normalization and Translation tabs.
+
+All LLM providers use the same OpenAI-compatible API — just paste the key, the app detects the service automatically.
+
+*Data as of March 2026*
+
+| # | Provider | Best Free Model | Free Tier | Key Prefix | How to Get API Key |
+|---|----------|----------------|-----------|------------|-------------------|
+| 1 | **Groq** | Llama 3.3 70B | **1K req/day, 100K tok/day** | `gsk_` | [console.groq.com](https://console.groq.com) → API Keys |
+| 2 | **Google AI Studio** | Gemini 2.5 Flash | **250 req/day, 250K tok/min** | `AIzaSy` | [aistudio.google.com](https://aistudio.google.com) → Get API Key |
+| 3 | **Cerebras** | Llama 3.3 70B | **~1M tok/day** | `csk-` | [cloud.cerebras.ai](https://cloud.cerebras.ai) → Sign Up → API Key |
+| 4 | **Mistral** | Mistral Small 4 | **~1B tok/month** | hex string | [console.mistral.ai](https://console.mistral.ai) → API Keys |
+| 5 | **OpenRouter** | DeepSeek R1, Llama 4 | **50 req/day** | `sk-or-` | [openrouter.ai](https://openrouter.ai) → Keys |
+| 6 | **xAI** | Grok 4 | **$25 credit** (one-time) | `xai-` | [console.x.ai](https://console.x.ai) → API Keys |
+| 7 | **GitHub Models** | GPT-4o, o3 | **50-150 req/day** | `ghp_` | [github.com/settings/tokens](https://github.com/settings/tokens) |
+| 8 | **OpenAI** | GPT-4o-mini | **No free tier** | `sk-` | [platform.openai.com](https://platform.openai.com) → API Keys |
+
+### Which LLM to choose?
+
+- **Best free for normalization**: **Groq** (Llama 3.3 70B, fast, good multilingual)
+- **Most generous free**: **Google AI Studio** (Gemini 2.5 Flash, 250K tok/min)
+- **Fastest inference**: **Groq** (300+ tok/s) or **Cerebras** (2000+ tok/s)
+
+### Recommended setup (free)
+
+| Slot | Provider | Why |
+|------|----------|-----|
+| #1 | Groq | Fast, good Llama 3.3 70B, same key as STT |
+| #2 | Google AI Studio | Generous limits, strong multilingual |
+| #3 | Cerebras | Ultra-fast backup |
+
+---
+
+## Translation Providers
+
+Translation uses the same LLM slots (3 providers) plus optional DeepL keys for higher quality.
+
+| Provider | Free Tier | Quality | How to Get |
+|----------|-----------|---------|-----------|
+| **DeepL** | **500K chars/month** per key | Best translation quality | [deepl.com/pro](https://www.deepl.com/pro) → API tab → Free |
+| **Any LLM** | Same as LLM table above | Good, context-aware | Same API keys |
+
+> **Tip**: You can create up to 5 free DeepL accounts for 2.5M chars/month total.
+
+---
+
+## How It Works
+
 ```
-
-## Getting a Groq API key
-
-Groq provides a **free API** for Whisper speech recognition and LLM text processing.
-
-1. Go to [console.groq.com](https://console.groq.com)
-2. Click **Sign Up** (Google, GitHub, or email)
-3. After login, go to **API Keys** in the left menu
-4. Click **Create API Key**
-5. Copy the key (starts with `gsk_...`)
-6. In Groq Dictation: right-click tray icon → **Settings** → paste into **API Key** field → **Save**
-
-> **Free tier limits**: ~14,400 audio seconds/day for Whisper, ~14,400 requests/day for LLM. More than enough for personal use.
-
-## Configuration
-
-Settings are stored in `%APPDATA%\GroqDictation\config.yaml`.
-
-Right-click the tray icon → **Settings** to open the configuration window.
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `groq.api_key` | Groq API key ([get one free](https://console.groq.com)) | — |
-| `groq.stt_model` | Whisper model | `whisper-large-v3-turbo` |
-| `groq.llm_model` | LLM for normalization | `llama-3.3-70b-versatile` |
-| `hotkey` | Hold-to-record hotkey | `f12` |
-| `audio.mic_device_index` | Microphone device index (null = auto) | `null` |
-| `normalization.enabled` | Enable AI post-processing | `true` |
-| `telemetry.enabled` | Send anonymous usage statistics | `true` |
+Hold hotkey → Record speech
+    ↓
+STT Provider (#1, #2, or #3) → Raw transcription
+    ↓
+LLM Provider → Fix errors, punctuation, filler words
+    ↓
+Type into active window
+    ↓
+User edits → Double-tap → App learns from corrections
+```
 
 ## Usage
 
 | Action | How |
 |--------|-----|
-| **Record** | Hold the hotkey (default: `F12`) — speak — release |
-| **Feedback** | After text is typed, edit it, then double-tap the hotkey |
-| **Settings** | Right-click tray icon → Settings |
-| **Profile** | Right-click tray icon → Open Profile |
+| **Record** | Hold hotkey (default: `F12`) → speak → release |
+| **Translate** | Select text → Ctrl+C twice quickly → translation overlay |
+| **Feedback** | After dictation, edit text, then double-tap hotkey |
+| **Settings** | Click tray icon → Settings |
 | **Quit** | Right-click tray icon → Quit |
 
-## Self-learning system
+## Settings Tabs
 
-The app maintains a user profile at `%APPDATA%\GroqDictation\user_profile.md`.
+| Tab | What's there |
+|-----|-------------|
+| **Interface** | Sounds, notifications, autostart, language, theme, telemetry |
+| **STT** | 3 provider slots for speech recognition + language selection |
+| **Dictation** | Hotkey, recording mode, microphone, noise filter |
+| **Normalization** | 3 LLM provider slots + normalization toggle |
+| **Translation** | 3 LLM provider slots + DeepL keys |
 
-### Profile structure
+## Bug Reports
 
-```
-📄 user_profile.md
-├── ## Meta          — session count, language mix
-├── ## Rules         — auto-generated behavioral rules
-├── ## Corrections   — wrong → right pairs (auto + feedback)
-├── ## Vocabulary    — frequent domain terms
-├── ## History       — triads: raw → normalized → user-edited
-└── ## Compiled Prompt — tournament-winning system prompt
-```
-
-### How to teach the app
-
-1. **Dictate** — hold the hotkey, speak, release
-2. **Review** — the app types the text into your active window
-3. **Edit** — if the app made mistakes, correct them manually (fix wrong words, spelling, etc.)
-4. **Double-tap** — quickly tap the hotkey **twice** (each tap < 0.5s, gap < 0.5s)
-5. **Confirmation** — you'll see a tray notification "Correction saved"
-
-The app compares what it typed vs what you changed, extracts correction pairs, and updates its profile. Over time, it stops making the same mistakes.
-
-### How learning works internally
-
-1. **Auto-diff** — after each session, diffs raw Whisper output vs LLM normalized text → learns Whisper error patterns
-2. **Feedback** — user edits text, double-taps → diffs normalized vs user-edited → learns user preferences
-3. **Rule compiler** — detects patterns in corrections → generates rules (e.g., "never translate English words")
-4. **Prompt tournament** — 3 LLM sessions generate candidate prompts from triads (raw/normalized/edited) → 4th session picks the best one
-
-### Conflict resolution
-
-- Feedback corrections always override auto-corrections
-- If a reverse correction exists (A→B and B→A), the newer one wins
-- Rules are re-compiled after every update
-
-## Architecture
-
-```
-src/
-├── main.py              — entry point, single-instance, GC workaround
-├── config.py            — YAML config, dataclasses
-├── engine.py            — state machine (idle → recording → processing → typing)
-├── audio_capture.py     — PyAudio callback, auto device selection, gain calibration
-├── chunk_manager.py     — VAD-based chunking, silence detection
-├── groq_stt.py          — Whisper API client (httpx), retry, hallucination filter
-├── hallucination_filter.py — multi-layer filter (RMS, logprob, blocklist, n-gram)
-├── normalizer.py        — two-pass LLM normalization
-├── text_injector.py     — keyboard simulation (pynput + win32 SendInput)
-├── user_profile.py      — MD-based profile, rule compiler, prompt tournament
-├── recording_overlay.py — tkinter waveform overlay
-├── tray_app.py          — pystray system tray, hotkey handling (hold/tap)
-├── updater.py           — GitHub release checker, auto-download
-└── settings_ui.py       — tkinter settings window
-```
-
-## Building
-
-### EXE
-
-```bash
-pip install pyinstaller
-pyinstaller groq_dictation.spec
-# Output: dist/GroqDictation.exe
-```
-
-### Installer
-
-Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php):
-
-```bash
-iscc installer.iss
-# Output: installer_output/GroqDictation-X.X.X-setup.exe
-```
-
-## Bug reports
-
-Found a bug? Open an issue:
-
-**[github.com/dmdukr/groq-dictation/issues](https://github.com/dmdukr/groq-dictation/issues)**
-
-Please include:
-
-| Field | Where to find |
-|-------|---------------|
-| **App version** | Tray icon tooltip |
-| **Windows version** | Settings → System → About |
-| **Logs** | `%APPDATA%\GroqDictation\logs\groq-dictation.log` |
-| **Profile** | `%APPDATA%\GroqDictation\user_profile.md` |
+Found a bug? [Open an issue](https://github.com/dmdukr/ai-polyglot-kit/issues)
 
 ---
 
-# Groq Dictation — Windows сервіс голосового введення
+# AI Polyglot Kit — Багатосервісний голосовий AI для Windows
 
-Системний голосовий ввід для Windows через Groq Whisper API з AI-нормалізацією та самонавчальним профілем.
+Системний голосовий ввід, нормалізація тексту та переклад для Windows — 7 STT та 8+ LLM провайдерів з автоматичним перемиканням.
 
-> 🤖 Створено **dmdukr** за участі [Claude](https://claude.ai) (Anthropic) як AI-співавтора — архітектура, код та документація розроблені спільно.
+> Створено **dmdukr** за участі [Claude](https://claude.ai) (Anthropic) як AI-співавтора.
 
 ---
 
 ## Можливості
 
-- **Утримання для запису** — утримуй гарячу клавішу для запису, відпусти для зупинки
-- **Groq Whisper** — швидке хмарне розпізнавання через Groq API (є безкоштовний план)
-- **AI-нормалізація** — двопрохідна LLM обробка виправляє помилки Whisper, відновлює ідіоми, форматує текст
-- **Самонавчальний профіль** — вчиться з ваших виправлень через подвійний тап
-- **Турнір промптів** — автоматично оптимізує промпт нормалізації (3 кандидати + суддя)
-- **Мультимовність** — українська, англійська у будь-якому міксі
-- **Автооновлення** — перевіряє релізи на GitHub, завантажує та встановлює нові версії
-- **Системний трей** — працює тихо, показує оверлей запису з формою хвилі
+- **7 STT провайдерів** — Groq, OpenAI, Soniox, Deepgram, Gladia, Speechmatics, AssemblyAI
+- **8+ LLM провайдерів** — Groq, Google AI Studio, Cerebras, Mistral, OpenRouter, OpenAI, xAI, GitHub Models
+- **3 слоти з failover** — коли лімт провайдера #1 вичерпано → автопереключення на #2 → #3
+- **Автовизначення провайдера** — вставте API ключ → програма визначить сервіс та завантажить доступні моделі
+- **Утримання для запису** — утримуйте гарячу клавішу для запису, відпустіть для зупинки
+- **AI-нормалізація** — LLM виправляє помилки розпізнавання, прибирає слова-паразити, форматує текст
+- **Швидкий переклад** — подвійний Ctrl+C на виділеному тексті → миттєвий переклад (DeepL або LLM)
+- **Самонавчання** — вчиться з ваших виправлень через подвійний тап
+- **Автооновлення** — перевіряє релізи на GitHub, завантажує та встановлює
+- **Темна/Світла тема** — слідкує за темою Windows або ручний вибір
 
 ## Встановлення
 
-### Варіант 1: Інсталятор (рекомендовано)
-
-1. Завантажте `GroqDictation-X.X.X-setup.exe` з [Releases](https://github.com/dmdukr/groq-dictation/releases)
+1. Завантажте `GroqDictation-X.X.X-setup.exe` з [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
 2. Запустіть інсталятор
-3. Отримайте безкоштовний Groq API ключ (див. [інструкцію](#отримання-groq-api-ключа) нижче)
-4. При першому запуску: правий клік на іконку в треї → **Settings** → вставте API ключ
+3. Отримайте безкоштовний API ключ від будь-якого провайдера (див. [Гід по провайдерах](#stt-провайдери) нижче)
+4. Натисніть іконку в треї → **Налаштування** → вставте ключ у вкладку STT
 
-> **Оновлення**: Програма автоматично перевіряє нові версії. При наявності оновлення ви побачите сповіщення — натисніть для завантаження та встановлення. Налаштування та профіль зберігаються.
->
-> **Видалення**: Windows **Параметри → Програми → Groq Dictation → Видалити**.
+---
 
-### Варіант 2: Портативна версія
+## STT провайдери
 
-Завантажте `GroqDictation.exe` з [Releases](https://github.com/dmdukr/groq-dictation/releases) — без інсталяції, запускається з будь-якої папки.
+Провайдери розпізнавання мовлення. Додайте до 3-х у Налаштування → STT.
 
-### Варіант 3: З вихідного коду
+*Дані станом на березень 2026*
 
-```bash
-git clone https://github.com/dmdukr/groq-dictation.git
-cd groq-dictation
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python -m src.main
-```
+| # | Провайдер | Модель | Безкоштовно | Мови | WER | Як отримати ключ |
+|---|-----------|--------|-------------|------|-----|-----------------|
+| 1 | **Groq** | Whisper Large V3 Turbo | **~8 год/день** (щоденне скидання) | 99+ | 0.16% | [console.groq.com](https://console.groq.com) → Sign Up → API Keys → Create |
+| 2 | **Soniox** | stt-async-v4 | **$200 кредитів ≈ 2000 год** (одноразово) | 60+ | Топ бенчмарків | [soniox.com](https://soniox.com) → Sign Up → Dashboard → API Key |
+| 3 | **Deepgram** | Nova-3 | **$200 кредитів ≈ 330 год** (одноразово) | 50+ | 0.14% | [console.deepgram.com](https://console.deepgram.com) → Sign Up → API Keys |
+| 4 | **Gladia** | Solaria-1 | **10 год/місяць** + $50 кредитів | 100+ | 0.16% | [app.gladia.io](https://app.gladia.io) → Sign Up → API Key |
+| 5 | **Speechmatics** | Enhanced (Ursa) | **8 год/місяць** | 50+ | 0.18% | [portal.speechmatics.com](https://portal.speechmatics.com) → Sign Up → API Key |
+| 6 | **AssemblyAI** | Universal-2 | **8 год/місяць** | 99 | 0.20% | [assemblyai.com](https://www.assemblyai.com) → Sign Up → Dashboard → API Key |
+| 7 | **OpenAI** | Whisper, GPT-4o-transcribe | **Немає безкоштовного** ($0.006/хв) | 99+ | 0.11% | [platform.openai.com](https://platform.openai.com) → API Keys |
 
-## Отримання Groq API ключа
+### Який STT обрати?
 
-Groq надає **безкоштовний API** для розпізнавання мовлення Whisper та LLM обробки тексту.
+- **Найкращий безкоштовний для щоденного використання**: **Groq** — 8 годин/день, щодня, без обмежень за часом
+- **Найбільший одноразовий кредит**: **Soniox** (2000 год) або **Deepgram** (330 год)
+- **Найкращий для змішаних мов (UK/RU/EN)**: **Groq Whisper V3** або **Soniox v4** (перемикання мов mid-sentence)
+- **Найкраща абсолютна точність**: **OpenAI GPT-4o-transcribe** (тільки платний)
 
-1. Перейдіть на [console.groq.com](https://console.groq.com)
-2. Натисніть **Sign Up** (Google, GitHub або email)
-3. Після входу перейдіть в **API Keys** у лівому меню
-4. Натисніть **Create API Key**
-5. Скопіюйте ключ (починається з `gsk_...`)
-6. У Groq Dictation: правий клік на іконку → **Settings** → вставте у поле **API Key** → **Save**
+### Рекомендоване налаштування (безкоштовне)
 
-> **Безкоштовний план**: ~14 400 секунд аудіо/день для Whisper, ~14 400 запитів/день для LLM. Більш ніж достатньо для особистого використання.
+| Слот | Провайдер | Чому |
+|------|-----------|------|
+| #1 | Groq | Найкращий щоденний ліміт (8 год/день) |
+| #2 | Soniox | 2000 год запасу, відмінна мультимовність |
+| #3 | Deepgram | 330 год запасу, точність Nova-3 |
+
+---
+
+## LLM провайдери
+
+LLM провайдери для нормалізації тексту та перекладу. Додайте до 3-х у Налаштування → Нормалізація та Переклад.
+
+Всі LLM провайдери використовують один формат API (OpenAI-сумісний) — просто вставте ключ, програма визначить сервіс автоматично.
+
+*Дані станом на березень 2026*
+
+| # | Провайдер | Найкраща безкоштовна модель | Безкоштовно | Префікс ключа | Як отримати |
+|---|-----------|---------------------------|-------------|---------------|------------|
+| 1 | **Groq** | Llama 3.3 70B | **1K запитів/день, 100K токенів/день** | `gsk_` | [console.groq.com](https://console.groq.com) → API Keys |
+| 2 | **Google AI Studio** | Gemini 2.5 Flash | **250 запитів/день, 250K токенів/хв** | `AIzaSy` | [aistudio.google.com](https://aistudio.google.com) → Get API Key |
+| 3 | **Cerebras** | Llama 3.3 70B | **~1M токенів/день** | `csk-` | [cloud.cerebras.ai](https://cloud.cerebras.ai) → Sign Up → API Key |
+| 4 | **Mistral** | Mistral Small 4 | **~1B токенів/місяць** | hex рядок | [console.mistral.ai](https://console.mistral.ai) → API Keys |
+| 5 | **OpenRouter** | DeepSeek R1, Llama 4 | **50 запитів/день** | `sk-or-` | [openrouter.ai](https://openrouter.ai) → Keys |
+| 6 | **xAI** | Grok 4 | **$25 кредитів** (одноразово) | `xai-` | [console.x.ai](https://console.x.ai) → API Keys |
+| 7 | **GitHub Models** | GPT-4o, o3 | **50-150 запитів/день** | `ghp_` | [github.com/settings/tokens](https://github.com/settings/tokens) |
+| 8 | **OpenAI** | GPT-4o-mini | **Немає безкоштовного** | `sk-` | [platform.openai.com](https://platform.openai.com) → API Keys |
+
+### Який LLM обрати?
+
+- **Найкращий для нормалізації**: **Groq** (Llama 3.3 70B, швидкий, гарна мультимовність)
+- **Найщедріший безкоштовний**: **Google AI Studio** (Gemini 2.5 Flash, 250K токенів/хв)
+- **Найшвидший**: **Groq** (300+ ток/с) або **Cerebras** (2000+ ток/с)
+
+### Рекомендоване налаштування (безкоштовне)
+
+| Слот | Провайдер | Чому |
+|------|-----------|------|
+| #1 | Groq | Швидкий, Llama 3.3 70B, той самий ключ що й для STT |
+| #2 | Google AI Studio | Щедрі ліміти, сильна мультимовність |
+| #3 | Cerebras | Ультрашвидкий запасний |
+
+---
+
+## Провайдери перекладу
+
+Переклад використовує ті самі LLM слоти (3 провайдери) плюс опціональні ключі DeepL для вищої якості.
+
+| Провайдер | Безкоштовно | Якість | Як отримати |
+|-----------|-------------|--------|------------|
+| **DeepL** | **500K символів/місяць** на ключ | Найкраща якість перекладу | [deepl.com/pro](https://www.deepl.com/pro) → API → Free |
+| **Будь-який LLM** | Як у таблиці LLM вище | Добра, контекстна | Ті самі ключі |
+
+---
 
 ## Використання
 
 | Дія | Як |
 |-----|-----|
-| **Запис** | Утримуйте гарячу клавішу (за замовчуванням: `F12`) — говоріть — відпустіть |
-| **Зворотній зв'язок** | Після введення тексту відредагуйте його, потім двічі натисніть гарячу клавішу |
-| **Налаштування** | Правий клік на іконку в треї → Settings |
-| **Профіль** | Правий клік на іконку в треї → Open Profile |
-| **Вихід** | Правий клік на іконку в треї → Quit |
+| **Запис** | Утримуйте гарячу клавішу (за замовч.: `F12`) → говоріть → відпустіть |
+| **Переклад** | Виділіть текст → Ctrl+C двічі швидко → вікно перекладу |
+| **Зворотній зв'язок** | Після диктування відредагуйте текст, потім двічі натисніть гарячу клавішу |
+| **Налаштування** | Натисніть іконку в треї → Налаштування |
+| **Вихід** | Правий клік на іконку → Вихід |
 
-## Система самонавчання
+## Вкладки налаштувань
 
-Додаток веде профіль користувача у `%APPDATA%\GroqDictation\user_profile.md`.
-
-### Як навчити додаток
-
-1. **Диктуйте** — утримуйте гарячу клавішу, говоріть, відпустіть
-2. **Перегляньте** — додаток введе текст у активне вікно
-3. **Відредагуйте** — якщо є помилки, виправте їх вручну
-4. **Подвійний тап** — швидко натисніть гарячу клавішу **двічі** (кожен тап < 0,5 с, пауза < 0,5 с)
-5. **Підтвердження** — ви побачите сповіщення "Виправлення збережено"
-
-Додаток порівняє те, що він набрав, з тим, що ви змінили, виділить пари виправлень і оновить профіль. З часом він перестане робити ті самі помилки.
-
-### Як працює навчання всередині
-
-1. **Авто-diff** — після кожної сесії порівнює вихід Whisper з нормалізованим текстом LLM → вивчає патерни помилок
-2. **Зворотній зв'язок** — користувач редагує текст, робить подвійний тап → порівнює нормалізований з відредагованим → вивчає вподобання
-3. **Компілятор правил** — виявляє патерни у виправленнях → генерує правила
-4. **Турнір промптів** — 3 LLM сесії генерують кандидатів з тріад (raw/normalized/edited) → 4-та обирає найкращий
-
-### Вирішення конфліктів
-
-- Виправлення від зворотнього зв'язку завжди мають пріоритет
-- Якщо існує зворотне виправлення (A→B та B→A) — новіше перемагає
-- Правила перекомпілюються після кожного оновлення
-
----
+| Вкладка | Що там |
+|---------|--------|
+| **Інтерфейс** | Звуки, сповіщення, автозапуск, мова, тема, телеметрія |
+| **STT** | 3 слоти провайдерів розпізнавання + вибір мов |
+| **Диктування** | Гаряча клавіша, режим запису, мікрофон, фільтр шуму |
+| **Нормалізація** | 3 слоти LLM провайдерів + перемикач нормалізації |
+| **Переклад** | 3 слоти LLM провайдерів + ключі DeepL |
 
 ## Повідомлення про помилки
 
-Знайшли баг? Відкрийте issue:
-
-**[github.com/dmdukr/groq-dictation/issues](https://github.com/dmdukr/groq-dictation/issues)**
-
-Будь ласка, вкажіть:
-
-| Поле | Де знайти |
-|------|-----------|
-| **Версія додатку** | Тултіп іконки в треї |
-| **Версія Windows** | Налаштування → Система → Про систему |
-| **Логи** | `%APPDATA%\GroqDictation\logs\groq-dictation.log` |
-| **Профіль** | `%APPDATA%\GroqDictation\user_profile.md` |
+Знайшли баг? [Відкрийте issue](https://github.com/dmdukr/ai-polyglot-kit/issues)
 
 ---
 
 ## Privacy Policy
 
-Groq Dictation collects **anonymous usage statistics** to improve the application. This can be disabled in Settings → Telemetry.
+AI Polyglot Kit collects **anonymous usage statistics** (can be disabled in Settings → Interface → Telemetry).
 
-### What is collected
-- Session count, audio duration, latency (aggregated numbers only)
-- STT/LLM model names used
-- Hallucination filter hit rates
-- App version, OS version
+**Collected**: session count, latency, model names, hallucination rates, app/OS version.
+**NOT collected**: audio, text, API keys, personal information.
 
-### What is NOT collected
-- No speech audio
-- No transcribed text
-- No API keys or credentials
-- No personal information
-- No IP addresses (Amplitude handles anonymization)
-
-### Data destination
-Anonymous events are sent to [Amplitude](https://amplitude.com) analytics. No data is sold or shared with third parties.
-
-### Opt-out
-Disable telemetry in Settings → Telemetry tab, or set `telemetry.enabled: false` in `config.yaml`.
+Data destination: [Amplitude](https://amplitude.com) analytics. No data sold or shared.
 
 ---
 
 ## License
 
 [GNU GPL v3](LICENSE) — Copyright (c) 2026 Dmytro Dubinko
-
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org)
