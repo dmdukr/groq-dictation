@@ -19,21 +19,21 @@ from .i18n import t
 
 logger = logging.getLogger(__name__)
 
-# ── Color Scheme (Flat UI Dashboard) ──────────────────────────────────
+# ── Color Scheme (Pastel Glass) ───────────────────────────────────────
 
-NAVY = "#2c3e50"             # header/sidebar
-NAVY_LIGHT = "#34495e"       # header hover
-BG_PAGE = "#ecf0f1"          # page background
-BG_CARD = "#ffffff"          # card surface
-TEXT_DARK = "#2c3e50"        # primary text
-TEXT_MID = "#7f8c8d"         # secondary text
-TEXT_LIGHT = "#bdc3c7"       # dimmed text
-ACCENT = "#e67e22"           # orange accent (buttons)
-ACCENT_HOVER = "#d35400"     # darker orange hover
-SUCCESS = "#27ae60"          # green
-DANGER = "#e74c3c"           # red
-INFO = "#3498db"             # blue
-BORDER = "#dcdde1"           # card borders
+NAVY = "#b8c5d6"             # pastel blue-grey header
+NAVY_LIGHT = "#c8d3e0"       # header hover
+BG_PAGE = "#f5f0f0"          # warm blush background
+BG_CARD = "#faf7f5"          # warm white card
+TEXT_DARK = "#4a4a5a"        # soft charcoal text
+TEXT_MID = "#8e8ea0"         # muted lavender text
+TEXT_LIGHT = "#b8b8c8"       # dimmed text
+ACCENT = "#e8b4a0"           # soft peach (buttons)
+ACCENT_HOVER = "#d4a090"     # deeper peach hover
+SUCCESS = "#a8d8c8"          # soft mint
+DANGER = "#e8a0a0"           # soft coral
+INFO = "#a0c4e8"             # soft sky
+BORDER = "#e8e0e0"           # blush border
 
 # ── Languages ─────────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ class TranslateOverlay:
 
             tk.Label(
                 header, text="\u2630  Groq Translate",
-                fg="white", bg=NAVY, font=("Segoe UI", 12, "bold"),
+                fg=TEXT_DARK, bg=NAVY, font=("Segoe UI", 12, "bold"),
                 padx=16,
             ).pack(side="left")
 
@@ -159,21 +159,21 @@ class TranslateOverlay:
             # Replace button
             replace_btn = tk.Label(
                 btn_frame, text="  \u21c4 Replace  ",
-                fg="white", bg=ACCENT, font=("Segoe UI", 9, "bold"),
-                cursor="hand2", padx=8, pady=4,
+                fg=TEXT_DARK, bg=ACCENT, font=("Segoe UI", 9, "bold"),
+                cursor="hand2", padx=10, pady=6,
             )
-            replace_btn.pack(side="left", padx=(0, 6), pady=8)
+            replace_btn.pack(side="left", padx=(0, 8), pady=8)
             replace_btn.bind("<Enter>", lambda e: replace_btn.config(bg=ACCENT_HOVER))
             replace_btn.bind("<Leave>", lambda e: replace_btn.config(bg=ACCENT))
 
             # Copy button
             copy_btn = tk.Label(
                 btn_frame, text="  \u2398 Copy  ",
-                fg="white", bg=INFO, font=("Segoe UI", 9, "bold"),
-                cursor="hand2", padx=8, pady=4,
+                fg=TEXT_DARK, bg=INFO, font=("Segoe UI", 9, "bold"),
+                cursor="hand2", padx=10, pady=6,
             )
-            copy_btn.pack(side="left", padx=(0, 6), pady=8)
-            copy_btn.bind("<Enter>", lambda e: copy_btn.config(bg="#2980b9"))
+            copy_btn.pack(side="left", padx=(0, 8), pady=8)
+            copy_btn.bind("<Enter>", lambda e: copy_btn.config(bg="#90b8d8"))
             copy_btn.bind("<Leave>", lambda e: copy_btn.config(bg=INFO))
 
             # ── Toolbar (language selector) ─────────────────────────
