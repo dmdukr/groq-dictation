@@ -430,7 +430,8 @@ class TranslateOverlay:
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{base_url}/v2/translate",
-                data={"auth_key": api_key, "text": text, "target_lang": deepl_lang},
+                headers={"Authorization": f"DeepL-Auth-Key {api_key}"},
+                data={"text": text, "target_lang": deepl_lang},
             )
             if resp.status_code == 456:
                 raise ValueError("DeepL quota exceeded for this key")
