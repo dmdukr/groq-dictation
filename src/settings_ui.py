@@ -97,16 +97,11 @@ class SettingsWindow:
 
     def _build_and_run(self) -> None:
         self._window = tk.Tk()
+        self._window.withdraw()  # hide until fully built (prevents jumping)
         self._window.title(t("settings.title"))
         self._window.geometry("740x750")
         self._window.resizable(True, True)
         self._window.minsize(700, 650)
-
-        # Center on screen
-        self._window.update_idletasks()
-        x = (self._window.winfo_screenwidth() - 520) // 2
-        y = (self._window.winfo_screenheight() - 620) // 2
-        self._window.geometry(f"+{x}+{y}")
 
         # Apply Sun Valley theme (Windows 11 native look)
         pref = load_translate_settings().get("theme", "auto")
@@ -135,9 +130,6 @@ class SettingsWindow:
             self._dark_bg = None
             self._dark_fg = None
             self._dark_fg2 = "#888888"
-
-        # Always on top
-        self._window.attributes("-topmost", True)
 
         # --- Buttons (fixed at bottom, pack FIRST so notebook gets remaining space) ---
         btn_frame = ttk.Frame(self._window)
@@ -331,6 +323,16 @@ class SettingsWindow:
                   ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         tab_iface.columnconfigure(1, weight=1)
+
+        # Center on screen and show (was hidden to prevent jumping)
+        self._window.update_idletasks()
+        w = self._window.winfo_width()
+        h = self._window.winfo_height()
+        x = (self._window.winfo_screenwidth() - w) // 2
+        y = (self._window.winfo_screenheight() - h) // 2
+        self._window.geometry(f"+{x}+{y}")
+        self._window.attributes("-topmost", True)
+        self._window.deiconify()
 
         self._window.mainloop()
 
@@ -685,20 +687,16 @@ class SettingsWindow:
 
         # Custom dark-aware restart dialog
         dlg = tk.Tk()
+        dlg.withdraw()
         dlg.title("AI Polyglot Kit")
         dlg.resizable(False, False)
-        dlg.attributes("-topmost", True)
         dlg.geometry("400x140")
-        dlg.update_idletasks()
-        x = (dlg.winfo_screenwidth() - 400) // 2
-        y = (dlg.winfo_screenheight() - 140) // 2
-        dlg.geometry(f"+{x}+{y}")
 
         try:
             import sv_ttk
-            dlg.update()
             sv_ttk.set_theme("dark" if self._is_dark else "light")
             if self._is_dark:
+                dlg.update()
                 set_dwm_dark_title_bar(dlg)
         except ImportError:
             pass
@@ -721,6 +719,12 @@ class SettingsWindow:
                    command=dlg.destroy).pack(side="left", padx=8)
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.update_idletasks()
+        x = (dlg.winfo_screenwidth() - dlg.winfo_width()) // 2
+        y = (dlg.winfo_screenheight() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{x}+{y}")
+        dlg.attributes("-topmost", True)
+        dlg.deiconify()
         dlg.mainloop()
 
         if result["restart"] and self._on_save:

@@ -9,7 +9,6 @@ Flow:
 import logging
 import os
 import subprocess
-import tempfile
 import threading
 import time
 from packaging.version import Version
@@ -131,7 +130,7 @@ class Updater:
         Returns dict with 'version', 'url', 'filename' if update available.
         """
         try:
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
                 resp = client.get(
                     GITHUB_API,
                     headers={"Accept": "application/vnd.github.v3+json"},

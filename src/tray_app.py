@@ -565,14 +565,10 @@ class TrayApp:
 
         def _show():
             root = tk.Tk()
+            root.withdraw()
             root.title(t("tray.about"))
-            root.attributes("-topmost", True)
             root.resizable(False, False)
             root.geometry("300x200")
-            root.update_idletasks()
-            x = (root.winfo_screenwidth() - 300) // 2
-            y = (root.winfo_screenheight() - 200) // 2
-            root.geometry(f"+{x}+{y}")
 
             # Apply theme
             pref = load_translate_settings().get("theme", "auto")
@@ -598,6 +594,14 @@ class TrayApp:
                 font=("Segoe UI", 10), justify="center",
             ).pack()
             about_ttk.Button(root, text="OK", command=root.destroy, style="Accent.TButton").pack(pady=12)
+
+            # Center and show
+            root.update_idletasks()
+            x = (root.winfo_screenwidth() - root.winfo_width()) // 2
+            y = (root.winfo_screenheight() - root.winfo_height()) // 2
+            root.geometry(f"+{x}+{y}")
+            root.attributes("-topmost", True)
+            root.deiconify()
             root.mainloop()
 
         threading.Thread(target=_show, daemon=True).start()
