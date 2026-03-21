@@ -556,29 +556,47 @@ class TrayApp:
             self._icon.stop()
 
     def _on_about_click(self, _icon=None, _item=None) -> None:
-        """Show About dialog."""
+        """Show About dialog with sv_ttk theme support."""
         from .config import APP_VERSION
+        from .utils import detect_windows_theme, set_dwm_dark_title_bar, load_translate_settings
         import tkinter as tk
+        from tkinter import ttk as about_ttk
+
         def _show():
             root = tk.Tk()
             root.title(t("tray.about"))
             root.attributes("-topmost", True)
             root.resizable(False, False)
-            root.geometry("300x180")
+            root.geometry("300x200")
             root.update_idletasks()
             x = (root.winfo_screenwidth() - 300) // 2
-            y = (root.winfo_screenheight() - 180) // 2
+            y = (root.winfo_screenheight() - 200) // 2
             root.geometry(f"+{x}+{y}")
 
-            tk.Label(
-                root, text=f"Groq Dictation v{APP_VERSION}",
-                font=("Segoe UI", 12, "bold"), pady=12,
-            ).pack()
-            tk.Label(
-                root, text="Author: Dmytro Dubinko\nLicense: GPL-3.0\n\ngithub.com/dmdukr/groq-dictation",
+            # Apply theme
+            pref = load_translate_settings().get("theme", "auto")
+            is_dark = pref == "dark" or (pref == "auto" and detect_windows_theme() == "dark")
+            try:
+                import sv_ttk
+                sv_ttk.set_theme("dark" if is_dark else "light")
+                if is_dark:
+                    root.update()
+                    set_dwm_dark_title_bar(root)
+            except ImportError:
+                pass
+
+            frame = about_ttk.Frame(root, padding=20)
+            frame.pack(fill="both", expand=True)
+
+            about_ttk.Label(
+                frame, text=f"Groq Dictation v{APP_VERSION}",
+                font=("Segoe UI", 12, "bold"),
+            ).pack(pady=(0, 12))
+            about_ttk.Label(
+                frame, text="Author: Dmytro Dubinko\nLicense: GPL-3.0\n\ngithub.com/dmdukr/groq-dictation",
                 font=("Segoe UI", 10), justify="center",
             ).pack()
-            tk.Button(root, text="OK", command=root.destroy, width=10).pack(pady=12)
+            about_ttk.Button(root, text="OK", command=root.destroy, style="Accent.TButton").pack(pady=12)
             root.mainloop()
 
         threading.Thread(target=_show, daemon=True).start()

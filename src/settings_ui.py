@@ -139,6 +139,13 @@ class SettingsWindow:
         # Always on top
         self._window.attributes("-topmost", True)
 
+        # --- Buttons (fixed at bottom, pack FIRST so notebook gets remaining space) ---
+        btn_frame = ttk.Frame(self._window)
+        btn_frame.pack(side="bottom", fill="x", padx=12, pady=12)
+
+        ttk.Button(btn_frame, text=t("settings.save"), command=self._save, style="Accent.TButton").pack(side="right", padx=4)
+        ttk.Button(btn_frame, text=t("settings.cancel"), command=self._window.destroy).pack(side="right", padx=4)
+
         # Notebook (tabs)
         notebook = ttk.Notebook(self._window)
         notebook.pack(fill="both", expand=True, padx=8, pady=(8, 0))
@@ -434,13 +441,6 @@ class SettingsWindow:
         ).grid(row=1, column=0, sticky="w", pady=(2, 12))
 
         tab_tel.columnconfigure(0, weight=1)
-
-        # --- Buttons (fixed at bottom) ---
-        btn_frame = ttk.Frame(self._window)
-        btn_frame.pack(side="bottom", fill="x", padx=12, pady=12)
-
-        ttk.Button(btn_frame, text=t("settings.save"), command=self._save, style="Accent.TButton").pack(side="right", padx=4)
-        ttk.Button(btn_frame, text=t("settings.cancel"), command=self._window.destroy).pack(side="right", padx=4)
 
         self._window.mainloop()
 
