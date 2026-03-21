@@ -196,21 +196,62 @@ class SettingsWindow:
 
         saved_keys = self._load_deepl_keys()
         self._deepl_key_vars = []
+        self._deepl_entries = []
+        self._deepl_usage_labels = []
         for i in range(5):
             val = saved_keys[i] if i < len(saved_keys) else ""
             var = tk.StringVar(master=self._window, value=val)
             self._deepl_key_vars.append(var)
-            entry = ttk.Entry(deepl_frame, textvariable=var, width=50, show="*")
+            entry = ttk.Entry(deepl_frame, textvariable=var, width=42, show="*")
             entry.grid(row=i, column=0, sticky="we", pady=1)
-            ttk.Label(deepl_frame, text=f"#{i+1}", foreground="gray").grid(
-                row=i, column=1, padx=(4, 0))
+            self._deepl_entries.append(entry)
+            usage_label = tk.Label(
+                deepl_frame, text="", fg="#888888", bg=deepl_frame.cget("background"),
+                font=("Segoe UI", 8), width=12, anchor="w",
+            )
+            usage_label.grid(row=i, column=1, padx=(4, 0))
+            self._deepl_usage_labels.append(usage_label)
         deepl_frame.columnconfigure(0, weight=1)
+
+        # Fetch usage for filled keys in background
+        def _fetch_usage():
+            for i, key in enumerate(saved_keys):
+                if not key.strip():
+                    continue
+                try:
+                    import httpx
+                    base = "https://api-free.deepl.com" if key.endswith(":fx") else "https://api.deepl.com"
+                    with httpx.Client(timeout=10.0) as client:
+                        resp = client.get(f"{base}/v2/usage",
+                                          headers={"Authorization": f"DeepL-Auth-Key {key}"})
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            used = data.get("character_count", 0)
+                            limit = data.get("character_limit", 0)
+                            used_k = f"{used // 1000}K"
+                            limit_k = f"{limit // 1000}K"
+                            color = "#27ae60" if used < limit * 0.8 else "#e67e22" if used < limit else "#e74c3c"
+                            self._deepl_usage_labels[i].config(text=f"{used_k}/{limit_k}", fg=color)
+                        elif resp.status_code == 403:
+                            self._deepl_usage_labels[i].config(text="invalid", fg="#e74c3c")
+                except Exception:
+                    self._deepl_usage_labels[i].config(text="error", fg="#e74c3c")
+
+        threading.Thread(target=_fetch_usage, daemon=True).start()
+
+        # Show/hide DeepL keys
+        self._show_deepl_var = tk.BooleanVar(master=self._window, value=False)
+        ttk.Checkbutton(
+            tab_api, text=t("settings.show_key"), variable=self._show_deepl_var,
+            command=lambda: [e.config(show="" if self._show_deepl_var.get() else "*")
+                             for e in self._deepl_entries],
+        ).grid(row=9, column=1, sticky="w", padx=(8, 0))
 
         hint_dl = tk.Label(
             tab_api, text=t("settings.deepl_hint"),
             fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
         )
-        hint_dl.grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        hint_dl.grid(row=10, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
         tab_api.columnconfigure(1, weight=1)
 
