@@ -71,7 +71,7 @@ Speech-to-text providers for voice recognition. Add up to 3 in Settings → STT 
 
 ## LLM Providers
 
-LLM providers for text normalization (fixing recognition errors) and translation. Add up to 3 in Settings → Normalization and Translation tabs.
+LLM providers for text normalization (fixing recognition errors after speech-to-text) and translation. Add up to 3 in Settings → Normalization and Translation tabs.
 
 All LLM providers use the same OpenAI-compatible API — just paste the key, the app detects the service automatically.
 
@@ -224,7 +224,7 @@ Found a bug? [Open an issue](https://github.com/dmdukr/ai-polyglot-kit/issues)
 
 ## LLM провайдери
 
-LLM провайдери для нормалізації тексту та перекладу. Додайте до 3-х у Налаштування → Нормалізація та Переклад.
+LLM провайдери для нормалізації тексту (виправлення помилок розпізнавання після STT) та перекладу. Додайте до 3-х у Налаштування → Нормалізація та Переклад.
 
 Всі LLM провайдери використовують один формат API (OpenAI-сумісний) — просто вставте ключ, програма визначить сервіс автоматично.
 
