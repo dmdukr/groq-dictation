@@ -117,13 +117,13 @@ class SettingsWindow:
             pass
 
         if self._is_dark:
-            BG = "#202020"
-            BG2 = "#2d2d2d"
-            FG = "#e4e4e4"
-            FG2 = "#999999"
-            FIELD = "#2d2d2d"
-            BORDER_C = "#3d3d3d"
-            SELECT = "#0078d4"
+            BG = "#202020"       # Windows 11 Settings background
+            BG2 = "#2d2d2d"      # card/surface
+            FG = "#ffffff"       # primary text
+            FG2 = "#9e9e9e"      # secondary text
+            FIELD = "#2d2d2d"    # input field
+            BORDER_C = "#383838" # subtle border
+            SELECT = "#0078d4"   # Windows accent blue
 
             self._window.configure(bg=BG)
 
@@ -160,21 +160,28 @@ class SettingsWindow:
             style.configure("TNotebook.Tab", background=BORDER_C, foreground=FG,
                              padding=[12, 6])
             style.map("TNotebook.Tab",
-                       background=[("selected", BG2), ("active", BG2)],
-                       foreground=[("selected", "#ffffff")])
+                       background=[("selected", BG2), ("active", "#353535"), ("!selected", BORDER_C)],
+                       foreground=[("selected", "#ffffff"), ("active", "#ffffff")])
 
             # Buttons
             style.configure("TButton", background=BG2, foreground=FG,
                              bordercolor=BORDER_C, padding=[8, 4])
             style.map("TButton",
-                       background=[("active", BORDER_C), ("pressed", BG)])
+                       background=[("active", "#3d3d3d"), ("pressed", "#353535")],
+                       foreground=[("active", FG)])
 
             # Entry & Combobox
             style.configure("TEntry", fieldbackground=FIELD, foreground=FG,
                              bordercolor=BORDER_C, insertcolor=FG)
+            style.map("TEntry",
+                       bordercolor=[("focus", SELECT)],
+                       lightcolor=[("focus", SELECT)])
             style.configure("TCombobox", fieldbackground=FIELD, foreground=FG,
                              bordercolor=BORDER_C, arrowcolor=FG)
-            style.map("TCombobox", fieldbackground=[("readonly", FIELD)])
+            style.map("TCombobox",
+                       fieldbackground=[("readonly", FIELD), ("readonly focus", FIELD)],
+                       bordercolor=[("focus", SELECT)],
+                       arrowcolor=[("active", FG)])
             # Combobox dropdown (Listbox) — requires option_add
             self._window.option_add("*TCombobox*Listbox.background", FIELD)
             self._window.option_add("*TCombobox*Listbox.foreground", FG)
@@ -184,8 +191,9 @@ class SettingsWindow:
             style.configure("TCheckbutton", background=BG, foreground=FG,
                              indicatorcolor=FIELD, indicatorbackground=FIELD)
             style.map("TCheckbutton",
-                       background=[("active", BG)],
-                       indicatorcolor=[("selected", SELECT)])
+                       background=[("active", BG), ("hover", BG)],
+                       foreground=[("active", FG), ("hover", FG)],
+                       indicatorcolor=[("selected", SELECT), ("selected active", SELECT)])
 
             # Scale / Slider
             style.configure("TScale", background=BG, troughcolor=BORDER_C,
