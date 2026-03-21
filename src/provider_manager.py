@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
 
 from .connectors.base import STTConnector, LLMConnector
 from .connectors.openai_stt import OpenAICompatibleSTT
@@ -23,8 +22,14 @@ def _create_stt_connector(slot: dict, on_quota_warning=None) -> STTConnector | N
     base_url = slot.get("base_url", "")
     model = slot.get("model", "whisper-large-v3-turbo")
 
-    # Non-OpenAI providers — will be added in Phase 3-4
-    if provider in STT_PROVIDERS:
+    # Non-OpenAI-compatible STT providers
+    if provider == "Soniox":
+        from .connectors.soniox_stt import SonioxSTT
+        return SonioxSTT(api_key=api_key, model=model or "stt-async-v4")
+    if provider == "Deepgram":
+        from .connectors.deepgram_stt import DeepgramSTT
+        return DeepgramSTT(api_key=api_key, model=model or "nova-3")
+    if provider in STT_PROVIDERS and provider not in ("Soniox", "Deepgram"):
         logger.warning("STT connector for %s not yet implemented", provider)
         return None
 
