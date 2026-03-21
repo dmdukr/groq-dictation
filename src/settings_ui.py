@@ -219,17 +219,6 @@ class SettingsWindow:
         ttk.Radiobutton(mode_frame, text=t("settings.mode_hold"),
                         variable=self._hotkey_mode_var, value="hold").pack(anchor="w")
 
-        ttk.Label(tab_dict, text=t("settings.hold_key")).grid(row=2, column=0, sticky="w", pady=4)
-        ptt_frame = ttk.Frame(tab_dict)
-        ptt_frame.grid(row=2, column=1, sticky="w", padx=(8, 0), pady=4)
-        self._ptt_var = tk.StringVar(master=self._window, value=self._config.ptt_key)
-        self._ptt_entry = ttk.Entry(ptt_frame, textvariable=self._ptt_var, width=15, state="readonly")
-        self._ptt_entry.pack(side="left")
-        self._ptt_record_btn = ttk.Button(ptt_frame, text=t("settings.record_btn"), command=self._start_ptt_capture)
-        self._ptt_record_btn.pack(side="left", padx=(8, 0))
-        ttk.Label(tab_dict, text=t("settings.hold_hint"),
-                  foreground="gray").grid(row=3, column=1, sticky="w", padx=(8, 0))
-
         # Audio section separator
         ttk.Separator(tab_dict, orient="horizontal").grid(
             row=4, column=0, columnspan=2, sticky="we", pady=(12, 4))
@@ -496,12 +485,6 @@ class SettingsWindow:
         self._capture_target = "hotkey"
         self._run_keyboard_capture()
 
-    def _start_ptt_capture(self) -> None:
-        """Enter PTT key recording mode using keyboard library for Win key support."""
-        self._ptt_record_btn.config(text="Press key...", state="disabled")
-        self._ptt_var.set("...")
-        self._capture_target = "ptt"
-        self._run_keyboard_capture()
 
     def _run_keyboard_capture(self) -> None:
         """Run keyboard capture in a background thread; update UI via window.after()."""
@@ -564,25 +547,15 @@ class SettingsWindow:
 
     def _update_capture_display(self, combo: str) -> None:
         """Update the display field while capturing (called on tkinter thread)."""
-        if self._capture_target == "ptt":
-            self._ptt_var.set(combo)
-        else:
-            self._hotkey_var.set(combo)
+        self._hotkey_var.set(combo)
 
     def _finish_capture(self, keys: list[str], cancelled: bool) -> None:
         """Finalize capture: set result or revert on cancel/timeout."""
-        if self._capture_target == "ptt":
-            if cancelled or not keys:
-                self._ptt_var.set(self._config.ptt_key)
-            else:
-                self._ptt_var.set("+".join(keys))
-            self._ptt_record_btn.config(text=t("settings.record_btn"), state="normal")
+        if cancelled or not keys:
+            self._hotkey_var.set(self._config.hotkey)
         else:
-            if cancelled or not keys:
-                self._hotkey_var.set(self._config.hotkey)
-            else:
-                self._hotkey_var.set("+".join(keys))
-            self._record_btn.config(text=t("settings.record_btn"), state="normal")
+            self._hotkey_var.set("+".join(keys))
+        self._record_btn.config(text=t("settings.record_btn"), state="normal")
 
     @staticmethod
     def _modifier_sort(key: str) -> int:
@@ -657,7 +630,7 @@ class SettingsWindow:
         # Dictation
         self._config.hotkey = self._hotkey_var.get().strip()
         self._config.hotkey_mode = self._hotkey_mode_var.get()
-        self._config.ptt_key = self._ptt_var.get().strip()
+        self._config.ptt_key = self._config.hotkey  # same key, different mode
         # text_injection.method is not exposed in UI, keep existing value
         self._config.normalization.enabled = self._normalize_var.get()
         self._config.ui.sound_on_start = self._sound_start_var.get()

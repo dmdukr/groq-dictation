@@ -165,8 +165,8 @@ class TrayApp:
 
             elif mode == "hold":
                 # Hold mode: hold combo to record, release to stop
-                # Parse PTT combo into individual keys
-                ptt = self._config.ptt_key
+                # Uses the same hotkey as toggle mode (one key, two modes)
+                ptt = self._config.hotkey
                 self._ptt_combo_keys = set(k.strip().lower() for k in ptt.split("+"))
                 # Hook all keyboard events for PTT tracking
                 keyboard.hook(self._on_ptt_event, suppress=False)
