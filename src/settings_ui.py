@@ -107,6 +107,29 @@ class SettingsWindow:
         y = (self._window.winfo_screenheight() - 620) // 2
         self._window.geometry(f"+{x}+{y}")
 
+        # Apply system theme to ttk
+        try:
+            from .translate_overlay import _get_theme
+            T = _get_theme()
+            style = ttk.Style(self._window)
+            if T is not None and T.get("bg", "#f3f3f3") == "#191919":
+                # Dark theme
+                self._window.configure(bg="#2d2d2d")
+                style.theme_use("clam")
+                style.configure(".", background="#2d2d2d", foreground="#ffffff",
+                                fieldbackground="#1e1e1e", selectbackground="#4cc2ff")
+                style.configure("TFrame", background="#2d2d2d")
+                style.configure("TLabel", background="#2d2d2d", foreground="#ffffff")
+                style.configure("TCheckbutton", background="#2d2d2d", foreground="#ffffff")
+                style.configure("TNotebook", background="#2d2d2d")
+                style.configure("TNotebook.Tab", background="#3d3d3d", foreground="#ffffff", padding=[10, 4])
+                style.map("TNotebook.Tab", background=[("selected", "#2d2d2d")])
+                style.configure("TButton", background="#3d3d3d", foreground="#ffffff")
+                style.configure("TCombobox", fieldbackground="#1e1e1e", foreground="#ffffff")
+                style.configure("TEntry", fieldbackground="#1e1e1e", foreground="#ffffff")
+        except Exception:
+            pass
+
         # Always on top
         self._window.attributes("-topmost", True)
 

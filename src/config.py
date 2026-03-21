@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "2.1.3"
+APP_VERSION = "2.1.4"
 APP_NAME = "GroqDictation"
 GITHUB_REPO = "dmdukr/groq-dictation"  # owner/repo for auto-update
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -119,14 +119,14 @@ class AppConfig:
 
         config = cls()
 
-        # Find config file
+        # Find config file — APPDATA (user settings) takes priority over local (defaults)
         if config_path is None:
-            config_path = DEFAULT_CONFIG_PATH
+            appdata_config = APP_DIR / "config.yaml"
+            if appdata_config.exists():
+                config_path = appdata_config
+            else:
+                config_path = DEFAULT_CONFIG_PATH
         config_path = Path(config_path)
-
-        if not config_path.exists():
-            # Try APPDATA location
-            config_path = APP_DIR / "config.yaml"
 
         if config_path.exists():
             logger.info(f"Loading config from {config_path}")
