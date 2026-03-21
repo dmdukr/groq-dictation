@@ -107,28 +107,102 @@ class SettingsWindow:
         y = (self._window.winfo_screenheight() - 620) // 2
         self._window.geometry(f"+{x}+{y}")
 
-        # Apply system theme to ttk
+        # Apply system theme
+        self._is_dark = False
         try:
             from .translate_overlay import _get_theme
             T = _get_theme()
-            style = ttk.Style(self._window)
-            if T is not None and T.get("bg", "#f3f3f3") == "#191919":
-                # Dark theme
-                self._window.configure(bg="#2d2d2d")
-                style.theme_use("clam")
-                style.configure(".", background="#2d2d2d", foreground="#ffffff",
-                                fieldbackground="#1e1e1e", selectbackground="#4cc2ff")
-                style.configure("TFrame", background="#2d2d2d")
-                style.configure("TLabel", background="#2d2d2d", foreground="#ffffff")
-                style.configure("TCheckbutton", background="#2d2d2d", foreground="#ffffff")
-                style.configure("TNotebook", background="#2d2d2d")
-                style.configure("TNotebook.Tab", background="#3d3d3d", foreground="#ffffff", padding=[10, 4])
-                style.map("TNotebook.Tab", background=[("selected", "#2d2d2d")])
-                style.configure("TButton", background="#3d3d3d", foreground="#ffffff")
-                style.configure("TCombobox", fieldbackground="#1e1e1e", foreground="#ffffff")
-                style.configure("TEntry", fieldbackground="#1e1e1e", foreground="#ffffff")
+            self._is_dark = T is not None and T.get("bg", "#f3f3f3") == "#191919"
         except Exception:
             pass
+
+        if self._is_dark:
+            BG = "#202020"
+            BG2 = "#2d2d2d"
+            FG = "#e4e4e4"
+            FG2 = "#999999"
+            FIELD = "#2d2d2d"
+            BORDER_C = "#3d3d3d"
+            SELECT = "#0078d4"
+
+            self._window.configure(bg=BG)
+
+            # Enable Windows dark title bar
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                value = ctypes.c_int(1)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    ctypes.byref(value), ctypes.sizeof(value))
+            except Exception:
+                pass
+
+            style = ttk.Style(self._window)
+            style.theme_use("clam")
+
+            # Base
+            style.configure(".", background=BG, foreground=FG,
+                             fieldbackground=FIELD, bordercolor=BORDER_C,
+                             darkcolor=BG, lightcolor=BG2,
+                             selectbackground=SELECT, selectforeground="#ffffff",
+                             troughcolor=BG, arrowcolor=FG)
+
+            # Frames & Labels
+            style.configure("TFrame", background=BG)
+            style.configure("TLabelframe", background=BG, foreground=FG)
+            style.configure("TLabelframe.Label", background=BG, foreground=FG)
+            style.configure("TLabel", background=BG, foreground=FG)
+
+            # Notebook
+            style.configure("TNotebook", background=BG, borderwidth=0)
+            style.configure("TNotebook.Tab", background=BORDER_C, foreground=FG,
+                             padding=[12, 6])
+            style.map("TNotebook.Tab",
+                       background=[("selected", BG2), ("active", BG2)],
+                       foreground=[("selected", "#ffffff")])
+
+            # Buttons
+            style.configure("TButton", background=BG2, foreground=FG,
+                             bordercolor=BORDER_C, padding=[8, 4])
+            style.map("TButton",
+                       background=[("active", BORDER_C), ("pressed", BG)])
+
+            # Entry & Combobox
+            style.configure("TEntry", fieldbackground=FIELD, foreground=FG,
+                             bordercolor=BORDER_C, insertcolor=FG)
+            style.configure("TCombobox", fieldbackground=FIELD, foreground=FG,
+                             bordercolor=BORDER_C, arrowcolor=FG)
+            style.map("TCombobox", fieldbackground=[("readonly", FIELD)])
+            # Combobox dropdown (Listbox) — requires option_add
+            self._window.option_add("*TCombobox*Listbox.background", FIELD)
+            self._window.option_add("*TCombobox*Listbox.foreground", FG)
+            self._window.option_add("*TCombobox*Listbox.selectBackground", SELECT)
+
+            # Checkbutton
+            style.configure("TCheckbutton", background=BG, foreground=FG,
+                             indicatorcolor=FIELD, indicatorbackground=FIELD)
+            style.map("TCheckbutton",
+                       background=[("active", BG)],
+                       indicatorcolor=[("selected", SELECT)])
+
+            # Scale / Slider
+            style.configure("TScale", background=BG, troughcolor=BORDER_C,
+                             sliderrelief="flat")
+            style.configure("Horizontal.TScale", background=BG)
+
+            # Separator
+            style.configure("TSeparator", background=BORDER_C)
+
+            # Scrollbar
+            style.configure("TScrollbar", background=BG2, troughcolor=BG,
+                             bordercolor=BG, arrowcolor=FG)
+
+            # Store colors for tk.Label/tk.Frame created manually
+            self._dark_bg = BG
+            self._dark_fg = FG
+            self._dark_fg2 = FG2
 
         # Always on top
         self._window.attributes("-topmost", True)
@@ -229,7 +303,9 @@ class SettingsWindow:
             entry.grid(row=i, column=0, sticky="we", pady=1)
             self._deepl_entries.append(entry)
             usage_label = tk.Label(
-                deepl_frame, text="", fg="#888888",
+                deepl_frame, text="",
+                fg=self._dark_fg2 if self._is_dark else "#888888",
+                bg=self._dark_bg if self._is_dark else deepl_frame.winfo_toplevel().cget("bg"),
                 font=("Segoe UI", 8), width=12, anchor="w",
             )
             usage_label.grid(row=i, column=1, padx=(4, 0))
@@ -272,7 +348,9 @@ class SettingsWindow:
 
         hint_dl = tk.Label(
             tab_api, text=t("settings.deepl_hint"),
-            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
+            fg=self._dark_fg2 if self._is_dark else "#888888",
+            bg=self._dark_bg if self._is_dark else tab_api.winfo_toplevel().cget("bg"),
+            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=400,
         )
         hint_dl.grid(row=10, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
@@ -378,7 +456,9 @@ class SettingsWindow:
         # Double-tap feedback hint
         feedback_hint = tk.Label(
             tab_dict, text=t("settings.feedback_hint"),
-            fg="#888888", font=("Segoe UI", 8), anchor="w", justify="left", wraplength=450,
+            fg=self._dark_fg2 if self._is_dark else "#888888",
+            bg=self._dark_bg if self._is_dark else tab_dict.winfo_toplevel().cget("bg"),
+            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=450,
         )
         feedback_hint.grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 4))
 
