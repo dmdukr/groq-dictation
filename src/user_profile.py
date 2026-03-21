@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────
 
 PROFILE_PATH = APP_DIR / "user_profile.md"
-PROFILE_JSON_PATH = APP_DIR / "user_profile.json"  # legacy, for migration
 
 MAX_CORRECTIONS = 200
 MAX_VOCABULARY = 500
@@ -431,7 +430,7 @@ class UserProfile:
     # ── Load / Save ──────────────────────────────────────────────────
 
     def load(self) -> None:
-        """Load profile from MD file. Migrate from JSON if needed."""
+        """Load profile from MD file."""
         if PROFILE_PATH.exists():
             try:
                 text = PROFILE_PATH.read_text(encoding="utf-8")
@@ -448,68 +447,8 @@ class UserProfile:
             except Exception as e:
                 logger.warning("Cannot parse profile MD (%s), starting fresh", e)
 
-        # Migrate from JSON if exists
-        if PROFILE_JSON_PATH.exists():
-            try:
-                self._migrate_from_json()
-                logger.info("Migrated profile from JSON to MD")
-                self.save(force=True)
-                return
-            except Exception as e:
-                logger.warning("Cannot migrate JSON profile: %s", e)
-
         self._data = self._empty_profile()
         logger.info("User profile: starting fresh")
-
-    def _migrate_from_json(self) -> None:
-        """Migrate legacy JSON profile to new MD structure."""
-        import json
-        with open(PROFILE_JSON_PATH, "r", encoding="utf-8") as f:
-            old = json.load(f)
-
-        self._data = self._empty_profile()
-
-        # Stats
-        stats = old.get("stats", {})
-        self._data["meta"]["sessions"] = stats.get("total_sessions", 0)
-        mix = stats.get("language_mix", {})
-        self._data["meta"]["cyrillic"] = mix.get("cyrillic", 0.5)
-        self._data["meta"]["latin"] = mix.get("latin", 0.5)
-
-        # Corrections — clean up garbage during migration
-        for key, entry in old.get("corrections", {}).items():
-            parts = key.split("|", 1)
-            if len(parts) != 2:
-                continue
-            wrong, right = parts[0].strip(".,!?;:\"'() "), parts[1].strip(".,!?;:\"'() ")
-            if not wrong or not right or wrong == right.lower():
-                continue
-            # Skip multi-word pairs (likely reformulations)
-            if len(wrong.split()) > 2 or len(right.split()) > 2:
-                continue
-            clean_key = f"{wrong.lower()}|{right}"
-            self._data["corrections"][clean_key] = {
-                "count": entry.get("count", 1),
-                "source": entry.get("source", "auto"),
-                "last_seen": entry.get("last_seen", _today()),
-            }
-
-        # Vocabulary
-        for word, entry in old.get("vocabulary", {}).items():
-            self._data["vocabulary"][word] = {
-                "count": entry.get("count", 1),
-                "last_seen": entry.get("last_seen", _today()),
-            }
-
-        # Proper nouns
-        for noun, entry in old.get("proper_nouns", {}).items():
-            self._data["proper_nouns"][noun] = {
-                "count": entry.get("count", 1),
-                "last_seen": entry.get("last_seen", _today()),
-            }
-
-        # Compile rules from migrated data
-        self._data["rules"] = _compile_rules(self._data)
 
     def save(self, force: bool = False) -> None:
         """Save profile to MD file (debounced unless force=True)."""

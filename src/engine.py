@@ -17,7 +17,6 @@ from .text_injector import TextInjector
 from .recording_overlay import RecordingOverlay
 from .user_profile import UserProfile
 from .telemetry import TelemetryCollector
-# from .window_context import get_window_context  # disabled: comtypes COM crashes process
 
 logger = logging.getLogger(__name__)
 
@@ -519,14 +518,6 @@ class DictationEngine:
             # Always unsuppress PTT
             if self._suppress_ptt_callback:
                 self._suppress_ptt_callback(False)
-            # Clear pressed keys state to avoid stuck keys
-            self._ptt_keys_pressed_clear()
-
-    def _ptt_keys_pressed_clear(self) -> None:
-        """Clear PTT pressed keys state (called after feedback to avoid stuck keys)."""
-        # This is a no-op; TrayApp handles its own key state.
-        # The suppress callback takes care of re-enabling PTT.
-        pass
 
     def _flash_icon(self, result: str) -> None:
         """Flash the tray icon to visually confirm feedback result.

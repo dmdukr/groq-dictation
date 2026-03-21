@@ -17,6 +17,7 @@ from .engine import DictationEngine, DictationState
 from .i18n import t
 from .translate_overlay import TranslateOverlay
 from .updater import Updater
+from .utils import normalize_key_name
 
 logger = logging.getLogger(__name__)
 
@@ -175,18 +176,6 @@ class TrayApp:
             logger.error(f"Failed to register hotkeys: {e}")
             self._on_error(f"Hotkey registration failed: {e}")
 
-    @staticmethod
-    def _normalize_key(name: str) -> str:
-        """Normalize keyboard event name to match settings format."""
-        mapping = {
-            "left windows": "win", "right windows": "win",
-            "left ctrl": "ctrl", "right ctrl": "ctrl",
-            "left alt": "alt", "right alt": "alt",
-            "left shift": "shift", "right shift": "shift",
-        }
-        low = name.lower()
-        return mapping.get(low, low)
-
     def _on_ptt_event(self, event) -> None:
         """Track key presses/releases for push-to-talk combo.
 
@@ -200,7 +189,7 @@ class TrayApp:
             return
 
         raw_name = event.name if hasattr(event, 'name') else ""
-        key_name = self._normalize_key(raw_name) if raw_name else ""
+        key_name = normalize_key_name(raw_name) if raw_name else ""
         if not key_name:
             return
 

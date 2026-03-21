@@ -2,7 +2,7 @@
 
 import os
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, asdict
 from pathlib import Path
 
 import yaml
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "2.1.9"
+APP_VERSION = "3.0.0"
 APP_NAME = "GroqDictation"
 GITHUB_REPO = "dmdukr/groq-dictation"  # owner/repo for auto-update
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -144,79 +144,37 @@ class AppConfig:
         return config
 
     def _apply_dict(self, data: dict) -> None:
-        """Apply a dictionary of settings to this config."""
-        if "groq" in data:
-            g = data["groq"]
-            if "api_key" in g and g["api_key"]:
-                self.groq.api_key = g["api_key"]
-            if "stt_model" in g:
-                self.groq.stt_model = g["stt_model"]
-            if "llm_model" in g:
-                self.groq.llm_model = g["llm_model"]
-            if "stt_language" in g:
-                self.groq.stt_language = g["stt_language"]
-            if "stt_temperature" in g:
-                self.groq.stt_temperature = g["stt_temperature"]
+        """Apply a dictionary of settings to this config.
 
-        if "audio" in data:
-            a = data["audio"]
-            for attr in (
-                "mic_device_index", "sample_rate", "frame_duration_ms",
-                "vad_aggressiveness", "silence_threshold_ms", "gain",
-                "min_chunk_duration_ms", "max_chunk_duration_s",
-            ):
-                if attr in a:
-                    setattr(self.audio, attr, a[attr])
+        Walks dataclass fields: for nested dataclasses, merges sub-dicts;
+        for plain fields, sets directly. Skips keys not present in data.
+        Special case: groq.api_key only overrides if non-empty (avoid blanking).
+        """
+        for f in fields(self):
+            if f.name not in data:
+                continue
+            value = data[f.name]
+            attr = getattr(self, f.name)
+            if hasattr(attr, "__dataclass_fields__") and isinstance(value, dict):
+                # Nested dataclass — merge fields
+                for sub_f in fields(attr):
+                    if sub_f.name in value:
+                        sub_val = value[sub_f.name]
+                        # Don't blank api_key from yaml (use .env instead)
+                        if f.name == "groq" and sub_f.name == "api_key" and not sub_val:
+                            continue
+                        setattr(attr, sub_f.name, sub_val)
+            else:
+                setattr(self, f.name, value)
 
-        if "hotkey" in data:
-            self.hotkey = data["hotkey"]
-        if "hotkey_mode" in data:
-            self.hotkey_mode = data["hotkey_mode"]
-        if "ptt_key" in data:
-            self.ptt_key = data["ptt_key"]
+    def to_dict(self) -> dict:
+        """Serialize config to a dict suitable for YAML save.
 
-        if "normalization" in data:
-            n = data["normalization"]
-            if "enabled" in n:
-                self.normalization.enabled = n["enabled"]
-            if "prompt" in n:
-                self.normalization.prompt = n["prompt"]
-            if "known_terms" in n:
-                self.normalization.known_terms = n["known_terms"]
-            if "temperature" in n:
-                self.normalization.temperature = n["temperature"]
-
-        if "profile" in data:
-            p = data["profile"]
-            for attr in ("enabled", "min_correction_count", "max_prompt_tokens", "decay_days"):
-                if attr in p:
-                    setattr(self.profile, attr, p[attr])
-
-        if "text_injection" in data:
-            t = data["text_injection"]
-            if "method" in t:
-                self.text_injection.method = t["method"]
-            if "typing_delay_ms" in t:
-                self.text_injection.typing_delay_ms = t["typing_delay_ms"]
-            if "backspace_batch_size" in t:
-                self.text_injection.backspace_batch_size = t["backspace_batch_size"]
-
-        if "telemetry" in data:
-            tel = data["telemetry"]
-            if "enabled" in tel:
-                self.telemetry.enabled = tel["enabled"]
-
-        if "ui" in data:
-            u = data["ui"]
-            for attr in ("show_notifications", "sound_on_start", "sound_on_stop", "language"):
-                if attr in u:
-                    setattr(self.ui, attr, u[attr])
-
-        if "logging" in data:
-            lg = data["logging"]
-            for attr in ("level", "file", "max_size_mb", "backup_count"):
-                if attr in lg:
-                    setattr(self.logging, attr, lg[attr])
+        Clears api_key (stored in .env, not yaml).
+        """
+        data = asdict(self)
+        data.get("groq", {})["api_key"] = ""  # never save key in yaml
+        return data
 
     def validate(self) -> list[str]:
         """Validate config, return list of errors (empty = valid)."""

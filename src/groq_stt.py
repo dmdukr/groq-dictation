@@ -12,7 +12,6 @@ from __future__ import annotations
 import io
 import logging
 import time
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from typing import Callable
 
 import httpx
@@ -20,35 +19,6 @@ import httpx
 from .config import GroqConfig
 
 logger = logging.getLogger(__name__)
-
-# ── Hallucination blocklist ──────────────────────────────────────────────
-# Whisper commonly hallucinates these phrases on silence or noise.
-HALLUCINATION_BLOCKLIST: set[str] = {
-    "thank you for watching",
-    "thanks for watching",
-    "subscribe",
-    "like and subscribe",
-    "please subscribe",
-    "mbc news",
-    "mbc뉴스",
-    "подписывайтесь",
-    "спасибо за просмотр",
-    "дякую за перегляд",
-    "подпишитесь на канал",
-    "ставьте лайки",
-    "продовження наступне",
-    "редактор субтитрів",
-    "переклад субтитрів",
-    "субтитри зроблено",
-    "субтитры сделаны",
-    "субтитры создавал",
-    "редактор субтитров",
-    "корректор",
-    "you",
-    "thank you",
-    "thanks",
-    "bye",
-}
 
 # ── Retry settings ───────────────────────────────────────────────────────
 _MAX_RETRIES = 3
@@ -64,7 +34,6 @@ class GroqSTT:
     def __init__(
         self,
         config: GroqConfig,
-        executor: Executor | None = None,
         on_quota_warning: Callable[[int, int], None] | None = None,
     ) -> None:
         if not config.api_key:
@@ -74,7 +43,7 @@ class GroqSTT:
             )
 
         self._config = config
-        self._on_quota_warning = on_quota_warning  # callback(remaining_sec, limit_sec)
+        self._on_quota_warning = on_quota_warning
         self._quota_limit: int = 0
         self._quota_remaining: int = 0
         self._warned_thresholds: set[int] = set()
@@ -83,8 +52,6 @@ class GroqSTT:
             headers={"Authorization": f"Bearer {config.api_key}"},
             timeout=30.0,
         )
-        self._executor = executor
-        self._owns_executor = False
 
         logger.info(
             "GroqSTT initialised  model=%s  language=%s  temperature=%.1f",
@@ -166,40 +133,9 @@ class GroqSTT:
         text = self._filter_response(response, previous_text, audio_duration_s)
         return text
 
-    def transcribe_async(
-        self,
-        wav_bytes: bytes,
-        callback: Callable[[str | None], None],
-        previous_text: str = "",
-    ) -> Future:
-        """Submit transcription to a background thread.
-
-        Args:
-            wav_bytes: Raw WAV file content.
-            callback: Called with the result (str or None) when done.
-            previous_text: Recent transcription context.
-
-        Returns:
-            A Future representing the pending result.
-        """
-        executor = self._get_executor()
-
-        def _task() -> str | None:
-            result = self.transcribe(wav_bytes, previous_text)
-            try:
-                callback(result)
-            except Exception:
-                logger.exception("Error in transcribe_async callback")
-            return result
-
-        return executor.submit(_task)
-
     def close(self) -> None:
-        """Shut down the HTTP client and internal executor if we own it."""
+        """Shut down the HTTP client."""
         self._http.close()
-        if self._owns_executor and self._executor is not None:
-            self._executor.shutdown(wait=False)
-            logger.debug("Internal executor shut down")
 
     @property
     def quota_remaining_sec(self) -> int:
@@ -232,17 +168,6 @@ class GroqSTT:
             logger.debug("Failed to parse quota headers: %s", e)
 
     # ── Private helpers ──────────────────────────────────────────────────
-
-    def _get_executor(self) -> Executor:
-        """Return the executor, creating an internal one if needed."""
-        if self._executor is None:
-            self._executor = ThreadPoolExecutor(
-                max_workers=1,
-                thread_name_prefix="groq-stt",
-            )
-            self._owns_executor = True
-            logger.debug("Created internal ThreadPoolExecutor")
-        return self._executor
 
     def _call_api_with_retry(
         self,

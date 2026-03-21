@@ -10,9 +10,10 @@ from pathlib import Path
 
 import yaml
 
-from .config import AppConfig, AudioConfig, APP_NAME
+from .config import AppConfig, APP_NAME
 from .audio_capture import AudioCapture
 from .i18n import t
+from .utils import set_dwm_dark_title_bar, detect_windows_theme, normalize_key_name, load_deepl_keys, save_translate_settings, load_translate_settings
 
 logger = logging.getLogger(__name__)
 
@@ -108,27 +109,20 @@ class SettingsWindow:
         self._window.geometry(f"+{x}+{y}")
 
         # Apply Sun Valley theme (Windows 11 native look)
-        self._is_dark = False
+        pref = load_translate_settings().get("theme", "auto")
+        if pref == "dark":
+            self._is_dark = True
+        elif pref == "light":
+            self._is_dark = False
+        else:
+            self._is_dark = detect_windows_theme() == "dark"
+
         try:
             import sv_ttk
-            from .translate_overlay import _get_theme
-            T = _get_theme()
-            self._is_dark = T is not None and T.get("bg", "#f3f3f3") == "#191919"
             sv_ttk.set_theme("dark" if self._is_dark else "light")
-
-            # Dark title bar on Windows 11
             if self._is_dark:
                 self._window.update()
-                try:
-                    import ctypes
-                    hwnd = ctypes.windll.user32.GetParent(self._window.winfo_id())
-                    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-                    value = ctypes.c_int(1)
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                        hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                        ctypes.byref(value), ctypes.sizeof(value))
-                except Exception:
-                    pass
+                set_dwm_dark_title_bar(self._window)
         except ImportError:
             pass
 
@@ -229,7 +223,7 @@ class SettingsWindow:
         deepl_frame = ttk.Frame(tab_api)
         deepl_frame.grid(row=8, column=1, sticky="we", pady=4, padx=(8, 0))
 
-        saved_keys = self._load_deepl_keys()
+        saved_keys = load_deepl_keys()
         self._deepl_key_vars = []
         self._deepl_entries = []
         self._deepl_usage_labels = []
@@ -482,7 +476,7 @@ class SettingsWindow:
 
                 def on_press(event):
                     nonlocal cancelled
-                    name = self._normalize_kb_name(event.name)
+                    name = normalize_key_name(event.name)
                     if name == "esc":
                         cancelled = True
                         done.set()
@@ -496,7 +490,7 @@ class SettingsWindow:
                     self._window.after(0, self._update_capture_display, "+".join(combo))
 
                 def on_release(event):
-                    name = self._normalize_kb_name(event.name)
+                    name = normalize_key_name(event.name)
                     pressed.discard(name)
                     # Finish only when ALL keys are released
                     if not pressed and max_combo:
@@ -546,22 +540,6 @@ class SettingsWindow:
             else:
                 self._hotkey_var.set("+".join(keys))
             self._record_btn.config(text=t("settings.record_btn"), state="normal")
-
-    @staticmethod
-    def _normalize_kb_name(name: str) -> str:
-        """Normalize keyboard library key name to a consistent format."""
-        mapping = {
-            "left windows": "win", "right windows": "win",
-            "left ctrl": "ctrl", "right ctrl": "ctrl",
-            "left alt": "alt", "right alt": "alt",
-            "left shift": "shift", "right shift": "shift",
-            "caps lock": "caps lock",
-            "print screen": "print screen",
-            "scroll lock": "scroll lock",
-            "page up": "page up", "page down": "page down",
-        }
-        low = name.lower()
-        return mapping.get(low, low)
 
     @staticmethod
     def _modifier_sort(key: str) -> int:
@@ -634,13 +612,7 @@ class SettingsWindow:
             sv_ttk.set_theme("dark" if self._is_dark else "light")
             if self._is_dark:
                 dlg.update()
-                try:
-                    import ctypes
-                    hwnd = ctypes.windll.user32.GetParent(dlg.winfo_id())
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                        hwnd, 20, ctypes.byref(ctypes.c_int(1)), 4)
-                except Exception:
-                    pass
+                set_dwm_dark_title_bar(dlg)
         except ImportError:
             pass
 
@@ -674,59 +646,12 @@ class SettingsWindow:
             self._on_save(restart=True)
 
     def _write_config(self) -> None:
-        """Write current config to config.yaml."""
-        data = {
-            "groq": {
-                "api_key": "",  # Don't save API key in yaml, use .env
-                "stt_model": self._config.groq.stt_model,
-                "llm_model": self._config.groq.llm_model,
-                "stt_language": self._config.groq.stt_language,
-                "stt_temperature": self._config.groq.stt_temperature,
-            },
-            "audio": {
-                "mic_device_index": self._config.audio.mic_device_index,
-                "sample_rate": self._config.audio.sample_rate,
-                "frame_duration_ms": self._config.audio.frame_duration_ms,
-                "vad_aggressiveness": self._config.audio.vad_aggressiveness,
-                "silence_threshold_ms": self._config.audio.silence_threshold_ms,
-                "min_chunk_duration_ms": self._config.audio.min_chunk_duration_ms,
-                "max_chunk_duration_s": self._config.audio.max_chunk_duration_s,
-                "gain": self._config.audio.gain,
-            },
-            "hotkey": self._config.hotkey,
-            "hotkey_mode": self._config.hotkey_mode,
-            "ptt_key": self._config.ptt_key,
-            "normalization": {
-                "enabled": self._config.normalization.enabled,
-                "prompt": self._config.normalization.prompt,
-                "known_terms": self._config.normalization.known_terms,
-                "temperature": self._config.normalization.temperature,
-            },
-            "text_injection": {
-                "method": self._config.text_injection.method,
-                "typing_delay_ms": self._config.text_injection.typing_delay_ms,
-                "backspace_batch_size": self._config.text_injection.backspace_batch_size,
-            },
-            "telemetry": {
-                "enabled": self._config.telemetry.enabled,
-            },
-            "ui": {
-                "show_notifications": self._config.ui.show_notifications,
-                "sound_on_start": self._config.ui.sound_on_start,
-                "sound_on_stop": self._config.ui.sound_on_stop,
-                "language": self._config.ui.language,
-            },
-            "logging": {
-                "level": self._config.logging.level,
-                "file": self._config.logging.file,
-                "max_size_mb": self._config.logging.max_size_mb,
-                "backup_count": self._config.logging.backup_count,
-            },
-        }
+        """Write current config to config.yaml using AppConfig.to_dict()."""
         from .config import APP_DIR
         APP_DIR.mkdir(parents=True, exist_ok=True)
         save_path = APP_DIR / "config.yaml"
         try:
+            data = self._config.to_dict()
             with open(save_path, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
             logger.info(f"Config saved to {save_path}")
@@ -748,47 +673,13 @@ class SettingsWindow:
 
     def _load_theme(self) -> str:
         """Load theme preference from translate_settings.json."""
-        from .config import APP_DIR
-        settings_file = APP_DIR / "translate_settings.json"
-        try:
-            if settings_file.exists():
-                import json
-                data = json.loads(settings_file.read_text(encoding="utf-8"))
-                return data.get("theme", "auto")
-        except Exception:
-            pass
-        return "auto"
-
-    def _load_deepl_keys(self) -> list[str]:
-        """Load DeepL API keys from translate_settings.json."""
-        from .config import APP_DIR
-        settings_file = APP_DIR / "translate_settings.json"
-        try:
-            if settings_file.exists():
-                import json
-                data = json.loads(settings_file.read_text(encoding="utf-8"))
-                keys = data.get("deepl_keys", [])
-                if not keys and data.get("deepl_key"):
-                    keys = [data["deepl_key"]]
-                return keys
-        except Exception:
-            pass
-        return []
+        return load_translate_settings().get("theme", "auto")
 
     def _save_deepl_key(self) -> None:
-        """Save all DeepL API keys to translate_settings.json."""
-        from .config import APP_DIR
-        import json
-        settings_file = APP_DIR / "translate_settings.json"
-        try:
-            data = {}
-            if settings_file.exists():
-                data = json.loads(settings_file.read_text(encoding="utf-8"))
-            keys = [v.get().strip() for v in self._deepl_key_vars]
-            data["deepl_keys"] = [k for k in keys if k]
-            data.pop("deepl_key", None)  # remove legacy single key
-            data["theme"] = self._theme_var.get()
-            settings_file.write_text(json.dumps(data), encoding="utf-8")
-            logger.info("DeepL keys saved (%d), theme=%s", len(data["deepl_keys"]), data["theme"])
-        except Exception as e:
-            logger.warning(f"Failed to save DeepL keys: {e}")
+        """Save all DeepL API keys and theme to translate_settings.json."""
+        keys = [v.get().strip() for v in self._deepl_key_vars]
+        save_translate_settings({
+            "deepl_keys": [k for k in keys if k],
+            "theme": self._theme_var.get(),
+        })
+        logger.info("DeepL keys + theme saved")

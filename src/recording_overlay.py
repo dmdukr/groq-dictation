@@ -6,10 +6,10 @@ All tkinter operations happen exclusively on the overlay thread via root.after()
 
 import collections
 import logging
-import math
 import queue
-import struct
 import threading
+
+from .utils import compute_rms
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ class RecordingOverlay:
                     while self._audio_queue and not self._audio_queue.empty() and frames_read < 10:
                         try:
                             data = self._audio_queue.get_nowait()
-                            rms_sum += _compute_rms(data)
+                            rms_sum += compute_rms(data)
                             frames_read += 1
                         except queue.Empty:
                             break
@@ -171,12 +171,3 @@ class RecordingOverlay:
                     pass
 
 
-def _compute_rms(data: bytes) -> float:
-    """Compute RMS of 16-bit PCM data."""
-    if not data or len(data) < 2:
-        return 0.0
-    n = len(data) // 2
-    samples = struct.unpack(f"<{n}h", data[:n * 2])
-    if not samples:
-        return 0.0
-    return math.sqrt(sum(s * s for s in samples) / n)

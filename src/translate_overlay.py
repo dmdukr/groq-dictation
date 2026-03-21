@@ -4,7 +4,6 @@ Shows clipboard text translated to selected language.
 Design: flat UI — navy header, light cards, orange accents.
 """
 
-import json
 import logging
 import threading
 import time
@@ -14,8 +13,9 @@ from tkinter import ttk
 import httpx
 import pyperclip
 
-from .config import GroqConfig, APP_DIR
+from .config import GroqConfig
 from .i18n import t
+from .utils import detect_windows_theme, load_translate_settings, save_translate_settings, load_deepl_keys
 
 logger = logging.getLogger(__name__)
 
@@ -58,31 +58,15 @@ THEME_DARK = {
 }
 
 
-def _detect_windows_theme() -> str:
-    """Detect Windows light/dark theme from registry. Returns 'light' or 'dark'."""
-    try:
-        import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-        )
-        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-        winreg.CloseKey(key)
-        return "light" if val == 1 else "dark"
-    except Exception:
-        return "light"
-
-
 def _get_theme() -> dict:
     """Get active theme dict based on user setting (auto/light/dark)."""
-    settings = _load_settings()
-    pref = settings.get("theme", "auto")
+    pref = load_translate_settings().get("theme", "auto")
     if pref == "light":
         return THEME_LIGHT
     elif pref == "dark":
         return THEME_DARK
     else:  # auto
-        return THEME_LIGHT if _detect_windows_theme() == "light" else THEME_DARK
+        return THEME_LIGHT if detect_windows_theme() == "light" else THEME_DARK
 
 # ── Languages ─────────────────────────────────────────────────────────
 
@@ -108,26 +92,6 @@ Translate the following text to {language}.
 Return ONLY the translation, no explanations or commentary.
 Preserve formatting, line breaks, and punctuation style."""
 
-_SETTINGS_FILE = APP_DIR / "translate_settings.json"
-
-
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(updates: dict) -> None:
-    try:
-        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        data = _load_settings()
-        data.update(updates)
-        _SETTINGS_FILE.write_text(json.dumps(data), encoding="utf-8")
-    except Exception:
-        pass
 
 
 class TranslateOverlay:
@@ -138,7 +102,7 @@ class TranslateOverlay:
         self._window: tk.Tk | None = None
         self._thread: threading.Thread | None = None
         self._source_text = ""
-        self._target_lang = _load_settings().get("target_lang", "en")
+        self._target_lang = load_translate_settings().get("target_lang", "en")
         self._deepl_rotation_idx = 0
 
     def show(self, text: str) -> None:
@@ -173,7 +137,7 @@ class TranslateOverlay:
             root.minsize(450, 350)
 
             # Load saved size
-            settings = _load_settings()
+            settings = load_translate_settings()
             w = settings.get("window_w", 640)
             h = settings.get("window_h", 460)
             root.update_idletasks()
@@ -183,7 +147,7 @@ class TranslateOverlay:
 
             def on_close():
                 try:
-                    _save_settings({
+                    save_translate_settings({
                         "window_w": root.winfo_width(),
                         "window_h": root.winfo_height(),
                     })
@@ -355,7 +319,7 @@ class TranslateOverlay:
                 for name, code in LANGUAGES:
                     if name == lang_name:
                         self._target_lang = code
-                        _save_settings({"target_lang": code})
+                        save_translate_settings({"target_lang": code})
                         break
 
                 result_text.config(state="normal")
@@ -426,7 +390,7 @@ class TranslateOverlay:
                 break
 
         # Try DeepL with key rotation
-        keys = self._load_deepl_keys()
+        keys = load_deepl_keys()
         if keys:
             for attempt in range(len(keys)):
                 key = self._next_deepl_key(keys)
@@ -450,15 +414,6 @@ class TranslateOverlay:
         result = self._translate_groq(text, target_language)
         return result, "Groq LLM"
 
-    def _load_deepl_keys(self) -> list[str]:
-        try:
-            data = _load_settings()
-            keys = data.get("deepl_keys", [])
-            if not keys and data.get("deepl_key"):
-                keys = [data["deepl_key"]]
-            return [k for k in keys if k.strip()]
-        except Exception:
-            return []
 
     def _next_deepl_key(self, keys: list[str]) -> str:
         if not keys:

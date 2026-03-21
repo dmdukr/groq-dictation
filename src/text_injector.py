@@ -180,68 +180,6 @@ class TextInjector:
             logger.warning(f"Failed to grab typed text: {e}")
             return ""
 
-    def grab_context_paragraph(self) -> str:
-        """Grab up to one paragraph of text before cursor from active window.
-
-        Uses Shift+Home then Shift+Up*3 to select, copies via Ctrl+C, restores cursor.
-        Returns empty string if nothing could be grabbed.
-        """
-        try:
-            # Save clipboard
-            try:
-                saved = pyperclip.paste()
-            except Exception:
-                saved = ""
-
-            pyperclip.copy("")  # Clear clipboard
-            time.sleep(0.02)
-
-            # Select from cursor to start of current paragraph (3 lines up max)
-            self._keyboard.press(Key.shift)
-            self._keyboard.press(Key.home)
-            self._keyboard.release(Key.home)
-            for _ in range(3):
-                self._keyboard.press(Key.up)
-                self._keyboard.release(Key.up)
-            self._keyboard.release(Key.shift)
-            time.sleep(0.02)
-
-            # Copy selection
-            self._keyboard.press(Key.ctrl)
-            self._keyboard.press("c")
-            self._keyboard.release("c")
-            self._keyboard.release(Key.ctrl)
-            time.sleep(0.05)
-
-            # Read clipboard
-            context = ""
-            try:
-                context = pyperclip.paste()
-            except Exception:
-                pass
-
-            # Deselect — move cursor to end (Right arrow)
-            self._keyboard.press(Key.end)
-            self._keyboard.release(Key.end)
-
-            # Restore clipboard
-            if saved:
-                time.sleep(0.02)
-                try:
-                    pyperclip.copy(saved)
-                except Exception:
-                    pass
-
-            # Return last paragraph only (max 500 chars)
-            if context:
-                context = context.strip()[-500:]
-                logger.debug(f"Grabbed context: {len(context)} chars")
-            return context
-
-        except Exception as e:
-            logger.debug(f"Failed to grab context: {e}")
-            return ""
-
     def _type_fast(self, text: str) -> None:
         """Type text using pynput Controller — no delay, maximum speed."""
         try:
@@ -253,35 +191,6 @@ class TextInjector:
                     self._keyboard.type(char)
                 except Exception:
                     pass
-
-    def _type_via_sendinput(self, text: str) -> None:
-        """Type text using pynput Controller (SendInput with KEYEVENTF_UNICODE)."""
-        delay = self._config.typing_delay_ms / 1000.0
-        for char in text:
-            try:
-                self._keyboard.type(char)
-                if delay > 0:
-                    time.sleep(delay)
-            except Exception as e:
-                logger.warning(f"Failed to type char '{char}': {e}")
-
-    def _type_via_clipboard(self, text: str) -> None:
-        """Type text by copying to clipboard and pasting (Ctrl+V)."""
-        try:
-            pyperclip.copy(text)
-            time.sleep(0.03)
-            self._keyboard.press(Key.ctrl)
-            self._keyboard.press("v")
-            self._keyboard.release("v")
-            self._keyboard.release(Key.ctrl)
-            time.sleep(0.05)
-        except Exception as e:
-            logger.error(f"Clipboard paste failed: {e}")
-            # Fallback to sendinput
-            self._type_via_sendinput(text)
-            return
-        finally:
-            pass  # Don't restore clipboard — it interferes with rapid pastes
 
     def _send_backspaces(self, count: int) -> None:
         """Send N backspace key presses in batches."""

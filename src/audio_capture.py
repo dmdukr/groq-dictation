@@ -7,17 +7,16 @@ for downstream consumption by ChunkManager / VAD pipeline.
 from __future__ import annotations
 
 import logging
-import math
 import queue
 import struct
 import threading
-import time
 from dataclasses import dataclass
 from typing import Callable
 
 import pyaudio
 
 from .config import AudioConfig
+from .utils import compute_rms
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +60,6 @@ def _apply_gain(data: bytes, gain: float) -> bytes:
             v = -32768
         amplified.append(v)
     return struct.pack(f"<{n_samples}h", *amplified)
-
-
-def _compute_rms(data: bytes) -> float:
-    """Compute the RMS amplitude of raw 16-bit signed PCM data."""
-    if not data or len(data) < SAMPLE_WIDTH:
-        return 0.0
-    n_samples = len(data) // SAMPLE_WIDTH
-    samples = struct.unpack(f"<{n_samples}h", data[:n_samples * SAMPLE_WIDTH])
-    if not samples:
-        return 0.0
-    mean_sq = sum(s * s for s in samples) / n_samples
-    return math.sqrt(mean_sq)
 
 
 # ── Main class ──────────────────────────────────────────────────────────────
@@ -358,7 +345,7 @@ class AudioCapture:
             for stream, dev, dev_queue in self._multi_streams:
                 try:
                     data = dev_queue.get(timeout=0.05)
-                    rms = _compute_rms(data)
+                    rms = compute_rms(data)
                     if rms > best_rms:
                         best_rms = rms
                         best_data = data
@@ -494,7 +481,7 @@ class AudioCapture:
             peak = 0
             for _ in range(n_frames):
                 data = stream.read(self._frame_samples, exception_on_overflow=False)
-                rms = _compute_rms(data)
+                rms = compute_rms(data)
                 total_rms += rms
                 # Track peak
                 n_samples = len(data) // SAMPLE_WIDTH
@@ -655,7 +642,7 @@ class AudioCapture:
             read_count = 0
             for _ in range(num_frames):
                 data = stream.read(self._frame_samples, exception_on_overflow=False)
-                total_rms += _compute_rms(data)
+                total_rms += compute_rms(data)
                 read_count += 1
 
             return total_rms / read_count if read_count > 0 else 0.0
