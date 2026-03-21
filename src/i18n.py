@@ -319,6 +319,40 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Free: deepl.com/pro → API tab → 500K chars/month free. Better translation quality.",
         "uk": "Безкоштовно: deepl.com/pro → API → 500K символів/місяць. Краща якість перекладу.",
     },
+
+    # ── Provider tabs ──────────────────────────────────────────
+    "settings.tab_stt": {
+        "en": "STT",
+        "uk": "STT",
+    },
+    "settings.tab_llm": {
+        "en": "Normalization",
+        "uk": "Нормалізація",
+    },
+    "settings.tab_translation": {
+        "en": "Translation",
+        "uk": "Переклад",
+    },
+    "settings.tab_interface": {
+        "en": "Interface",
+        "uk": "Інтерфейс",
+    },
+    "settings.provider_fallback_hint": {
+        "en": "When provider #1 exhausts its limit → auto-switch to #2 → #3",
+        "uk": "При вичерпанні лімітів #1 → переключення на #2 → #3",
+    },
+    "settings.provider_recommended": {
+        "en": "Recommended services",
+        "uk": "Рекомендовані сервіси",
+    },
+    "settings.provider_not_connected": {
+        "en": "(not connected)",
+        "uk": "(не підключено)",
+    },
+    "settings.duplicate_key_warning": {
+        "en": "Duplicate API key in slots — use different accounts",
+        "uk": "Дублікат API ключа — використовуйте різні акаунти",
+    },
 }
 
 # Current language

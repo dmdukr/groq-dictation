@@ -380,18 +380,6 @@ class SettingsWindow:
         ttk.Checkbutton(tab_dict, text=t("settings.normalize_check"),
                         variable=self._normalize_var).grid(row=5, column=0, columnspan=2, sticky="w", pady=8)
 
-        self._sound_start_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_start)
-        ttk.Checkbutton(tab_dict, text=t("settings.beep_start"),
-                        variable=self._sound_start_var).grid(row=6, column=0, columnspan=2, sticky="w", pady=2)
-
-        self._sound_stop_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_stop)
-        ttk.Checkbutton(tab_dict, text=t("settings.beep_stop"),
-                        variable=self._sound_stop_var).grid(row=7, column=0, columnspan=2, sticky="w", pady=2)
-
-        self._notif_var = tk.BooleanVar(master=self._window, value=self._config.ui.show_notifications)
-        ttk.Checkbutton(tab_dict, text=t("settings.show_notif"),
-                        variable=self._notif_var).grid(row=8, column=0, columnspan=2, sticky="w", pady=2)
-
         # Double-tap feedback hint
         feedback_hint = tk.Label(
             tab_dict, text=t("settings.feedback_hint"),
@@ -399,30 +387,50 @@ class SettingsWindow:
             bg=self._dark_bg if self._is_dark else tab_dict.winfo_toplevel().cget("bg"),
             font=("Segoe UI", 8), anchor="w", justify="left", wraplength=450,
         )
-        feedback_hint.grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 4))
-
-        self._autostart_var = tk.BooleanVar(master=self._window, value=_get_autostart())
-        ttk.Checkbutton(tab_dict, text=t("settings.autostart"),
-                        variable=self._autostart_var).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
-
-        ttk.Label(tab_dict, text=t("settings.ui_language")).grid(row=11, column=0, sticky="w", pady=(12, 4))
-        self._ui_lang_var = tk.StringVar(master=self._window, value=self._config.ui.language)
-        ui_lang_combo = ttk.Combobox(tab_dict, textvariable=self._ui_lang_var, width=15, values=[
-            "uk", "en",
-        ], state="readonly")
-        ui_lang_combo.grid(row=11, column=1, sticky="w", padx=(8, 0), pady=(12, 4))
-
-        # Translate theme selector
-        ttk.Label(tab_dict, text=t("settings.theme")).grid(row=12, column=0, sticky="w", pady=4)
-        self._theme_var = tk.StringVar(master=self._window, value=self._load_theme())
-        theme_combo = ttk.Combobox(tab_dict, textvariable=self._theme_var, width=15, values=[
-            "auto", "light", "dark",
-        ], state="readonly")
-        theme_combo.grid(row=12, column=1, sticky="w", padx=(8, 0), pady=4)
+        feedback_hint.grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 4))
 
         tab_dict.columnconfigure(1, weight=1)
 
-        # --- Tab 4: Telemetry ---
+        # --- Tab 4: Interface ---
+        tab_iface = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_iface, text=f"  {t('settings.tab_interface')}  ")
+
+        self._sound_start_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_start)
+        ttk.Checkbutton(tab_iface, text=t("settings.beep_start"),
+                        variable=self._sound_start_var).grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
+
+        self._sound_stop_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_stop)
+        ttk.Checkbutton(tab_iface, text=t("settings.beep_stop"),
+                        variable=self._sound_stop_var).grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
+
+        self._notif_var = tk.BooleanVar(master=self._window, value=self._config.ui.show_notifications)
+        ttk.Checkbutton(tab_iface, text=t("settings.show_notif"),
+                        variable=self._notif_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
+
+        self._autostart_var = tk.BooleanVar(master=self._window, value=_get_autostart())
+        ttk.Checkbutton(tab_iface, text=t("settings.autostart"),
+                        variable=self._autostart_var).grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
+
+        ttk.Separator(tab_iface, orient="horizontal").grid(
+            row=4, column=0, columnspan=2, sticky="we", pady=(12, 4))
+
+        ttk.Label(tab_iface, text=t("settings.ui_language")).grid(row=5, column=0, sticky="w", pady=4)
+        self._ui_lang_var = tk.StringVar(master=self._window, value=self._config.ui.language)
+        ui_lang_combo = ttk.Combobox(tab_iface, textvariable=self._ui_lang_var, width=15, values=[
+            "uk", "en",
+        ], state="readonly")
+        ui_lang_combo.grid(row=5, column=1, sticky="w", padx=(8, 0), pady=4)
+
+        ttk.Label(tab_iface, text=t("settings.theme")).grid(row=6, column=0, sticky="w", pady=4)
+        self._theme_var = tk.StringVar(master=self._window, value=self._load_theme())
+        theme_combo = ttk.Combobox(tab_iface, textvariable=self._theme_var, width=15, values=[
+            "auto", "light", "dark",
+        ], state="readonly")
+        theme_combo.grid(row=6, column=1, sticky="w", padx=(8, 0), pady=4)
+
+        tab_iface.columnconfigure(1, weight=1)
+
+        # --- Tab 5: Telemetry ---
         tab_tel = ttk.Frame(notebook, padding=12)
         notebook.add(tab_tel, text=f"  {t('settings.tab_telemetry')}  ")
 
