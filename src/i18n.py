@@ -342,8 +342,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "uk": "При вичерпанні лімітів #1 → переключення на #2 → #3",
     },
     "settings.provider_recommended": {
-        "en": "Recommended services",
-        "uk": "Рекомендовані сервіси",
+        "en": "Recommended services (GitHub)",
+        "uk": "Рекомендовані сервіси (GitHub)",
     },
     "settings.provider_not_connected": {
         "en": "(not connected)",

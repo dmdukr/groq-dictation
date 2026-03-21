@@ -146,13 +146,24 @@ class SettingsWindow:
         ttk.Button(btn_frame, text=t("settings.save"), command=self._save, style="Accent.TButton").pack(side="right", padx=4)
         ttk.Button(btn_frame, text=t("settings.cancel"), command=self._window.destroy).pack(side="right", padx=4)
 
-        # Notebook (tabs)
+        # Notebook (tabs) — order: Interface, STT, Dictation, Normalization, Translation
         notebook = ttk.Notebook(self._window)
         notebook.pack(fill="both", expand=True, padx=8, pady=(8, 0))
 
-        # --- Tab 1: STT Providers ---
+        # Create all tab frames first, add in desired order
+        tab_iface = ttk.Frame(notebook, padding=12)
         tab_stt = ttk.Frame(notebook, padding=8)
+        tab_dict = ttk.Frame(notebook, padding=12)
+        tab_llm = ttk.Frame(notebook, padding=8)
+        tab_trans = ttk.Frame(notebook, padding=8)
+
+        notebook.add(tab_iface, text=f"  {t('settings.tab_interface')}  ")
         notebook.add(tab_stt, text=f"  {t('settings.tab_stt')}  ")
+        notebook.add(tab_dict, text=f"  {t('settings.tab_dictation')}  ")
+        notebook.add(tab_llm, text=f"  {t('settings.tab_llm')}  ")
+        notebook.add(tab_trans, text=f"  {t('settings.tab_translation')}  ")
+
+        # ── STT tab content ──────────────────────────────────────────
         self._stt_slots = self._build_provider_slots(tab_stt, self._config.providers.stt, stt=True)
 
         # Languages (for STT)
@@ -184,24 +195,18 @@ class SettingsWindow:
                 row=row, column=col, sticky="w", padx=(0, 8),
             )
 
-        # --- Tab 2: LLM Normalization ---
-        tab_llm = ttk.Frame(notebook, padding=8)
-        notebook.add(tab_llm, text=f"  {t('settings.tab_llm')}  ")
+        # ── LLM Normalization tab content ────────────────────────────
         self._llm_slots = self._build_provider_slots(tab_llm, self._config.providers.llm, stt=False)
 
         self._normalize_var = tk.BooleanVar(master=self._window, value=self._config.normalization.enabled)
         ttk.Checkbutton(tab_llm, text=t("settings.normalize_check"),
                         variable=self._normalize_var).pack(anchor="w", pady=(8, 0))
 
-        # --- Tab 3: Translation ---
-        tab_trans = ttk.Frame(notebook, padding=8)
-        notebook.add(tab_trans, text=f"  {t('settings.tab_translation')}  ")
+        # ── Translation tab content ──────────────────────────────────
         self._trans_slots = self._build_provider_slots(
             tab_trans, self._config.providers.translation, stt=False, translation=True)
 
-        # --- Tab 4: Dictation & Audio (merged) ---
-        tab_dict = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_dict, text=f"  {t('settings.tab_dictation')}  ")
+        # ── Dictation & Audio tab content ────────────────────────────
 
         # Hotkey section
         ttk.Label(tab_dict, text=t("settings.hotkey_label")).grid(row=0, column=0, sticky="w", pady=4)
@@ -281,9 +286,7 @@ class SettingsWindow:
 
         tab_dict.columnconfigure(1, weight=1)
 
-        # --- Tab 5: Interface & Telemetry (merged) ---
-        tab_iface = ttk.Frame(notebook, padding=12)
-        notebook.add(tab_iface, text=f"  {t('settings.tab_interface')}  ")
+        # ── Interface & Telemetry tab content ────────────────────────
 
         self._sound_start_var = tk.BooleanVar(master=self._window, value=self._config.ui.sound_on_start)
         ttk.Checkbutton(tab_iface, text=t("settings.beep_start"),
@@ -353,9 +356,22 @@ class SettingsWindow:
         """
         from .providers import detect_provider, fetch_models, ALL_STT_PROVIDERS, ALL_LLM_PROVIDERS
 
-        # Hint
-        ttk.Label(parent, text=t("settings.provider_fallback_hint"),
-                  foreground="#888888", font=("Segoe UI", 8)).pack(anchor="w", pady=(0, 6))
+        # Hint + README link
+        hint_frame = ttk.Frame(parent)
+        hint_frame.pack(fill="x", pady=(0, 6))
+        ttk.Label(hint_frame, text=t("settings.provider_fallback_hint"),
+                  foreground="#888888", font=("Segoe UI", 8)).pack(side="left")
+
+        readme_section = "stt-providers" if stt else ("translation-providers" if translation else "llm-providers")
+        link = tk.Label(
+            hint_frame, text=t("settings.provider_recommended"),
+            fg="#4cc2ff" if self._is_dark else "#0078d4",
+            bg=self._dark_bg if self._is_dark else hint_frame.winfo_toplevel().cget("bg"),
+            font=("Segoe UI", 8, "underline"), cursor="hand2",
+        )
+        link.pack(side="right")
+        link.bind("<Button-1>", lambda e, s=readme_section: __import__("webbrowser").open(
+            "https://github.com/dmdukr/ai-polyglot-kit#" + s))
 
         slot_widgets = []
         provider_list = list(ALL_STT_PROVIDERS) if stt else list(ALL_LLM_PROVIDERS)

@@ -249,6 +249,7 @@ class TrayApp:
             MenuItem(
                 "Start / Stop Dictation",
                 self._on_toggle_click,
+                default=True,  # left-click triggers this action
             ),
             Menu.SEPARATOR,
             MenuItem(
