@@ -16,7 +16,7 @@ System-wide dictation, text normalization, and translation for Windows — power
 - **8+ LLM providers** — Groq, Google AI Studio, Cerebras, Mistral, OpenRouter, OpenAI, xAI, GitHub Models
 - **3-slot failover** — when provider #1 exhausts its free limit, auto-switch to #2, then #3
 - **Auto-detect provider** — paste API key → app detects the service and fetches available models
-- **Hold-to-record** — hold hotkey to record, release to stop
+- **Two recording modes** — Hold (hold key to record, release to stop) or Toggle (press to start, press again to stop)
 - **AI normalization** — LLM post-processing fixes recognition errors, removes filler words, formats text
 - **Quick Translate** — double Ctrl+C on selected text → instant translation (DeepL or LLM)
 - **Self-learning profile** — learns from your corrections via double-tap feedback
@@ -25,7 +25,7 @@ System-wide dictation, text normalization, and translation for Windows — power
 
 ## Installation
 
-1. Download `GroqDictation-X.X.X-setup.exe` from [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
+1. Download `AIPolyglotKit-setup.exe` from [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
 2. Run the installer
 3. Get a free API key from any supported provider (see [Provider Guide](#stt-providers) below)
 4. Click tray icon → **Settings** → paste your API key into the STT tab
@@ -169,7 +169,7 @@ Found a bug? [Open an issue](https://github.com/dmdukr/ai-polyglot-kit/issues)
 - **8+ LLM провайдерів** — Groq, Google AI Studio, Cerebras, Mistral, OpenRouter, OpenAI, xAI, GitHub Models
 - **3 слоти з failover** — коли лімт провайдера #1 вичерпано → автопереключення на #2 → #3
 - **Автовизначення провайдера** — вставте API ключ → програма визначить сервіс та завантажить доступні моделі
-- **Утримання для запису** — утримуйте гарячу клавішу для запису, відпустіть для зупинки
+- **Два режими запису** — Утримання (тримайте клавішу для запису, відпустіть для зупинки) або Перемикач (натисніть для старту, ще раз для зупинки)
 - **AI-нормалізація** — LLM виправляє помилки розпізнавання, прибирає слова-паразити, форматує текст
 - **Швидкий переклад** — подвійний Ctrl+C на виділеному тексті → миттєвий переклад (DeepL або LLM)
 - **Самонавчання** — вчиться з ваших виправлень через подвійний тап
@@ -178,7 +178,7 @@ Found a bug? [Open an issue](https://github.com/dmdukr/ai-polyglot-kit/issues)
 
 ## Встановлення
 
-1. Завантажте `GroqDictation-X.X.X-setup.exe` з [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
+1. Завантажте `AIPolyglotKit-setup.exe` з [Releases](https://github.com/dmdukr/ai-polyglot-kit/releases)
 2. Запустіть інсталятор
 3. Отримайте безкоштовний API ключ від будь-якого провайдера (див. [Гід по провайдерах](#stt-провайдери) нижче)
 4. Натисніть іконку в треї → **Налаштування** → вставте ключ у вкладку STT
