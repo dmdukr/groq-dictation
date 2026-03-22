@@ -87,6 +87,7 @@ class SettingsWindow:
     # Persistent Tk root — shared across all opens to avoid sv_ttk corruption
     _tk_root: tk.Tk | None = None
     _theme_applied: str = ""
+    _active_window: tk.Toplevel | None = None  # prevent multiple opens
 
     def __init__(self, config: AppConfig, audio_capture: AudioCapture, on_save=None):
         self._config = config
@@ -96,6 +97,14 @@ class SettingsWindow:
 
     def show(self) -> None:
         """Open settings window in a new thread (non-blocking)."""
+        # Prevent opening multiple settings windows
+        if SettingsWindow._active_window is not None:
+            try:
+                SettingsWindow._active_window.lift()
+                SettingsWindow._active_window.focus_force()
+                return
+            except Exception:
+                SettingsWindow._active_window = None
         thread = threading.Thread(target=self._build_and_run, daemon=True)
         thread.start()
 
@@ -112,6 +121,7 @@ class SettingsWindow:
         root = self._get_root()
 
         self._window = tk.Toplevel(root)
+        SettingsWindow._active_window = self._window
         self._window.withdraw()  # hide until fully built (prevents jumping)
         self._window.title(t("settings.title"))
         self._window.geometry("740x750")
@@ -356,6 +366,7 @@ class SettingsWindow:
 
         # Protocol: on close destroy Toplevel and quit mainloop
         def _on_close():
+            SettingsWindow._active_window = None
             self._window.destroy()
             self._get_root().quit()
         self._window.protocol("WM_DELETE_WINDOW", _on_close)
