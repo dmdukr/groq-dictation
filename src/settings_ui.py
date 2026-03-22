@@ -13,7 +13,7 @@ import yaml
 from .config import AppConfig, APP_NAME
 from .audio_capture import AudioCapture
 from .i18n import t
-from .utils import set_dwm_dark_title_bar, detect_windows_theme, normalize_key_name, save_translate_settings, load_translate_settings
+from .utils import set_dwm_dark_title_bar, normalize_key_name, save_translate_settings, load_translate_settings
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +84,6 @@ def _set_autostart(enabled: bool) -> None:
 class SettingsWindow:
     """Modal settings window with tabs for all configurable options."""
 
-    # Persistent Tk root — shared across all opens to avoid sv_ttk corruption
-    _tk_root: tk.Tk | None = None
-    _theme_applied: str = ""
     _active_window: tk.Toplevel | None = None  # prevent multiple opens
 
     def __init__(self, config: AppConfig, audio_capture: AudioCapture, on_save=None):
@@ -96,29 +93,28 @@ class SettingsWindow:
         self._window: tk.Toplevel | None = None
 
     def show(self) -> None:
-        """Open settings window in a new thread (non-blocking)."""
+        """Open settings window on the shared Tk thread (non-blocking)."""
+        from . import tk_host
         # Prevent opening multiple settings windows
         if SettingsWindow._active_window is not None:
             try:
-                SettingsWindow._active_window.lift()
-                SettingsWindow._active_window.focus_force()
+                tk_host.run_on_tk(lambda: SettingsWindow._active_window.lift())
                 return
             except Exception:
                 SettingsWindow._active_window = None
-        thread = threading.Thread(target=self._build_and_run, daemon=True)
-        thread.start()
+        tk_host.run_on_tk(self._build)
 
-    @classmethod
-    def _get_root(cls) -> tk.Tk:
-        """Get or create a persistent hidden Tk root."""
-        if cls._tk_root is None or not cls._tk_root.winfo_exists():
-            cls._tk_root = tk.Tk()
-            cls._tk_root.withdraw()
-            cls._theme_applied = ""
-        return cls._tk_root
+    def _close_window(self) -> None:
+        """Close settings window, release guard."""
+        SettingsWindow._active_window = None
+        if self._window:
+            self._window.destroy()
+            self._window = None
 
-    def _build_and_run(self) -> None:
-        root = self._get_root()
+    def _build(self) -> None:
+        """Build the settings UI. Runs on the Tk host thread."""
+        from . import tk_host
+        root = tk_host.get_root()
 
         self._window = tk.Toplevel(root)
         SettingsWindow._active_window = self._window
@@ -128,23 +124,8 @@ class SettingsWindow:
         self._window.resizable(True, True)
         self._window.minsize(700, 650)
 
-        # Apply Sun Valley theme (Windows 11 native look)
-        pref = load_translate_settings().get("theme", "auto")
-        if pref == "dark":
-            self._is_dark = True
-        elif pref == "light":
-            self._is_dark = False
-        else:
-            self._is_dark = detect_windows_theme() == "dark"
-
-        target_theme = "dark" if self._is_dark else "light"
-        if SettingsWindow._theme_applied != target_theme:
-            try:
-                import sv_ttk
-                sv_ttk.set_theme(target_theme)
-                SettingsWindow._theme_applied = target_theme
-            except ImportError:
-                pass
+        # Theme from tk_host (applied once at startup)
+        self._is_dark = tk_host.is_dark()
 
         if self._is_dark:
             self._window.configure(bg="#1c1c1c")
@@ -178,7 +159,7 @@ class SettingsWindow:
         btn_frame.pack(side="bottom", fill="x", padx=12, pady=12)
 
         ttk.Button(btn_frame, text=t("settings.save"), command=self._save, style="Accent.TButton").pack(side="right", padx=4)
-        ttk.Button(btn_frame, text=t("settings.cancel"), command=self._window.destroy).pack(side="right", padx=4)
+        ttk.Button(btn_frame, text=t("settings.cancel"), command=self._close_window).pack(side="right", padx=4)
 
         # Notebook (tabs) — order: Interface, STT, Dictation, Normalization, Translation
         notebook = ttk.Notebook(self._window)
@@ -364,13 +345,7 @@ class SettingsWindow:
         self._window.attributes("-topmost", True)
         self._window.deiconify()
 
-        # Protocol: on close destroy Toplevel and quit mainloop
-        def _on_close():
-            SettingsWindow._active_window = None
-            self._window.destroy()
-            self._get_root().quit()
-        self._window.protocol("WM_DELETE_WINDOW", _on_close)
-        self._get_root().mainloop()
+        self._window.protocol("WM_DELETE_WINDOW", self._close_window)
 
     # --- Hotkey capture (uses `keyboard` library to detect all keys incl. Win) ---
 
@@ -749,13 +724,11 @@ class SettingsWindow:
         def on_yes():
             result["restart"] = True
             dlg.destroy()
-            self._window.destroy()
-            self._get_root().quit()
+            self._close_window()
 
         def on_no():
             dlg.destroy()
-            self._window.destroy()
-            self._get_root().quit()
+            self._close_window()
 
         ttk.Button(btn_frame, text=t("settings.save"),
                    command=on_yes, style="Accent.TButton").pack(side="left", padx=8)

@@ -101,8 +101,7 @@ class TranslateOverlay:
     def __init__(self, groq_config: GroqConfig, provider_manager: ProviderManager | None = None):
         self._groq = groq_config
         self._provider_manager = provider_manager
-        self._window: tk.Tk | None = None
-        self._thread: threading.Thread | None = None
+        self._window: tk.Toplevel | None = None
         self._source_text = ""
         self._target_lang = load_translate_settings().get("target_lang", "en")
         self._deepl_rotation_idx = 0
@@ -112,11 +111,8 @@ class TranslateOverlay:
             return
         self._source_text = text.strip()
         self.hide()
-        # Wait for previous window to fully close
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
-        self._thread = threading.Thread(target=self._build_and_run, daemon=True)
-        self._thread.start()
+        from . import tk_host
+        tk_host.run_on_tk(self._build)
 
     def hide(self) -> None:
         if self._window:
@@ -126,57 +122,52 @@ class TranslateOverlay:
                 pass
             self._window = None
 
-    def _build_and_run(self) -> None:
+    def _build(self) -> None:
+        """Build translate overlay. Runs on Tk host thread."""
         try:
+            from . import tk_host
             T = _get_theme()
             is_dark = T is THEME_DARK
 
-            root = tk.Tk()
-            self._window = root
-            root.title("AI Polyglot Kit — Translate")
-            root.attributes("-topmost", True)
-            root.overrideredirect(False)
-            root.configure(bg=T["bg"])
-            root.minsize(420, 320)
-
-            # Style ttk Combobox manually (no sv_ttk — avoids theme corruption)
-            style = ttk.Style()
-            if is_dark:
-                style.configure("Translate.TCombobox", foreground=T["text"])
-            lang_combo_style = "Translate.TCombobox"
+            win = tk.Toplevel(tk_host.get_root())
+            self._window = win
+            win.title("AI Polyglot Kit — Translate")
+            win.attributes("-topmost", True)
+            win.configure(bg=T["bg"])
+            win.minsize(420, 320)
 
             if is_dark:
                 from .utils import set_dwm_dark_title_bar
-                root.update_idletasks()
-                set_dwm_dark_title_bar(root)
+                win.update_idletasks()
+                set_dwm_dark_title_bar(win)
 
             # Load saved size
             settings = load_translate_settings()
             w = settings.get("window_w", 500)
             h = settings.get("window_h", 400)
-            root.update_idletasks()
-            sx = (root.winfo_screenwidth() - w) // 2
-            sy = (root.winfo_screenheight() - h) // 2
-            root.geometry(f"{w}x{h}+{sx}+{sy}")
+            win.update_idletasks()
+            sx = (win.winfo_screenwidth() - w) // 2
+            sy = (win.winfo_screenheight() - h) // 2
+            win.geometry(f"{w}x{h}+{sx}+{sy}")
 
             def on_close():
                 try:
                     save_translate_settings({
-                        "window_w": root.winfo_width(),
-                        "window_h": root.winfo_height(),
+                        "window_w": win.winfo_width(),
+                        "window_h": win.winfo_height(),
                     })
                 except Exception:
                     pass
-                root.destroy()
+                self._window = None
+                win.destroy()
 
-            root.protocol("WM_DELETE_WINDOW", on_close)
+            win.protocol("WM_DELETE_WINDOW", on_close)
 
             # ── Top bar: Translate tab + language selector ───────────
-            top_bar = tk.Frame(root, bg=T["header"], height=44)
+            top_bar = tk.Frame(win, bg=T["header"], height=44)
             top_bar.pack(fill="x")
             top_bar.pack_propagate(False)
 
-            # "Translate" tab button (always active)
             tab_btn = tk.Label(
                 top_bar, text=" \U0001F5E8 Translate ",
                 fg=T["btn_text"], bg=T["accent"],
@@ -184,7 +175,6 @@ class TranslateOverlay:
             )
             tab_btn.pack(side="left", padx=(8, 0), pady=6)
 
-            # Engine label (right side)
             engine_var = tk.StringVar(value="")
             tk.Label(
                 top_bar, textvariable=engine_var,
@@ -192,7 +182,7 @@ class TranslateOverlay:
             ).pack(side="right", padx=12)
 
             # ── Language selector row ────────────────────────────────
-            lang_row = tk.Frame(root, bg=T["bg"], padx=12, pady=8)
+            lang_row = tk.Frame(win, bg=T["bg"], padx=12, pady=8)
             lang_row.pack(fill="x")
 
             lang_var = tk.StringVar()
@@ -201,7 +191,6 @@ class TranslateOverlay:
             lang_combo = ttk.Combobox(
                 lang_row, textvariable=lang_var, values=lang_names,
                 width=16, state="readonly", font=("Segoe UI", 10),
-                style=lang_combo_style,
             )
             for i, (name, code) in enumerate(LANGUAGES):
                 if code == self._target_lang:
@@ -216,7 +205,7 @@ class TranslateOverlay:
             ).pack(side="right")
 
             # ── Translation result area ──────────────────────────────
-            text_frame = tk.Frame(root, bg=T["border"], padx=1, pady=1)
+            text_frame = tk.Frame(win, bg=T["border"], padx=1, pady=1)
             text_frame.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
             result_text = tk.Text(
@@ -230,10 +219,9 @@ class TranslateOverlay:
             result_text.pack(fill="both", expand=True)
 
             # ── Bottom buttons bar ───────────────────────────────────
-            btn_bar = tk.Frame(root, bg=T["bg"], padx=12, pady=8)
+            btn_bar = tk.Frame(win, bg=T["bg"], padx=12, pady=8)
             btn_bar.pack(fill="x")
 
-            # Helper to make styled buttons
             def _make_btn(parent, text, bg_color, hover_color, side="left"):
                 btn = tk.Label(
                     parent, text=text,
@@ -261,7 +249,7 @@ class TranslateOverlay:
                     pyperclip.copy(text)
                     status_var.set("\u2713 " + t("translate.copied"))
                     copy_btn.config(bg=T["success"], fg=T["btn_text"])
-                    root.after(2000, lambda: copy_btn.config(bg=T["card"], fg=T["text"]))
+                    win.after(2000, lambda: copy_btn.config(bg=T["card"], fg=T["text"]))
 
             copy_btn.bind("<Button-1>", do_copy)
 
@@ -274,16 +262,20 @@ class TranslateOverlay:
                 pyperclip.copy(translated)
                 on_close()
 
-                import ctypes
-                time.sleep(0.2)
-                user32 = ctypes.windll.user32
-                VK_CONTROL, VK_V = 0x11, 0x56
-                KEYEVENTF_KEYUP = 0x0002
-                user32.keybd_event(VK_CONTROL, 0, 0, 0)
-                user32.keybd_event(VK_V, 0, 0, 0)
-                user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
-                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-                logger.info("Replaced selection with translation (%d chars)", len(translated))
+                # Simulate Ctrl+V in worker thread (sleep would block Tk)
+                def _paste():
+                    import ctypes
+                    time.sleep(0.2)
+                    user32 = ctypes.windll.user32
+                    VK_CONTROL, VK_V = 0x11, 0x56
+                    KEYEVENTF_KEYUP = 0x0002
+                    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                    user32.keybd_event(VK_V, 0, 0, 0)
+                    user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+                    user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+                    logger.info("Replaced selection with translation (%d chars)", len(translated))
+
+                threading.Thread(target=_paste, daemon=True).start()
 
             replace_btn.bind("<Button-1>", do_replace)
 
@@ -318,12 +310,11 @@ class TranslateOverlay:
                             status_var.set(f"{elapsed:.1f}s \u2022 {len(translated)} chars")
                             engine_var.set(f"via {engine}")
 
-                        root.after(0, _update)
+                        tk_host.run_on_tk(_update)
 
                     except Exception as exc:
                         logger.error("Translation failed: %s", exc)
                         err_msg = str(exc)
-                        # User-friendly error messages
                         if "Illegal header" in err_msg or "Bearer" in err_msg:
                             err_msg = "API ключ не налаштовано. Відкрийте Налаштування → Переклад"
                         elif "No translation" in err_msg:
@@ -336,7 +327,7 @@ class TranslateOverlay:
                             result_text.config(state="disabled")
                             status_var.set("Failed")
 
-                        root.after(0, _error)
+                        tk_host.run_on_tk(_error)
 
                 threading.Thread(target=_api_call, daemon=True).start()
 
@@ -345,18 +336,14 @@ class TranslateOverlay:
 
             lang_combo.bind("<<ComboboxSelected>>", on_lang_change)
 
-            # Keyboard shortcuts
-            root.bind("<Escape>", lambda e: on_close())
-            root.bind("<Control-c>", do_copy)
+            win.bind("<Escape>", lambda e: on_close())
+            win.bind("<Control-c>", do_copy)
 
             # Start first translation
             do_translate()
 
-            root.mainloop()
-
         except Exception as e:
             logger.error(f"Translate overlay error: {e}")
-        finally:
             self._window = None
 
     # ── Translation engines ─────────────────────────────────────────

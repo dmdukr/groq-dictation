@@ -117,6 +117,10 @@ class TrayApp:
         icon.visible = True
         logger.info(f"Tray app started, hotkey: {self._config.hotkey}")
 
+        # Start persistent Tk event loop (shared by Settings, Translate, About)
+        from . import tk_host
+        tk_host.start()
+
         # Register hotkeys
         self._register_hotkeys()
 
@@ -559,30 +563,29 @@ class TrayApp:
             self._icon.stop()
 
     def _on_about_click(self, _icon=None, _item=None) -> None:
-        """Show About dialog — plain tk widgets (no sv_ttk to avoid theme corruption)."""
+        """Show About dialog as Toplevel on shared Tk host."""
         from .config import APP_VERSION
-        from .utils import detect_windows_theme, set_dwm_dark_title_bar, load_translate_settings
+        from .utils import set_dwm_dark_title_bar
+        from . import tk_host
         import tkinter as tk
 
         def _show():
-            root = tk.Tk()
-            root.withdraw()
-            root.title(t("tray.about"))
-            root.resizable(False, False)
-            root.geometry("300x200")
+            win = tk.Toplevel(tk_host.get_root())
+            win.title(t("tray.about"))
+            win.resizable(False, False)
+            win.geometry("300x200")
 
-            pref = load_translate_settings().get("theme", "auto")
-            is_dark = pref == "dark" or (pref == "auto" and detect_windows_theme() == "dark")
+            is_dark = tk_host.is_dark()
             bg = "#1c1c1c" if is_dark else "#f0f0f0"
             fg = "#ffffff" if is_dark else "#1a1a1a"
             accent = "#0078d4"
 
-            root.configure(bg=bg)
+            win.configure(bg=bg)
             if is_dark:
-                root.update_idletasks()
-                set_dwm_dark_title_bar(root)
+                win.update_idletasks()
+                set_dwm_dark_title_bar(win)
 
-            frame = tk.Frame(root, bg=bg, padx=20, pady=20)
+            frame = tk.Frame(win, bg=bg, padx=20, pady=20)
             frame.pack(fill="both", expand=True)
 
             tk.Label(
@@ -594,25 +597,24 @@ class TrayApp:
                 font=("Segoe UI", 10), justify="center", bg=bg, fg=fg,
             ).pack()
             tk.Button(
-                root, text="OK", command=root.destroy,
+                win, text="OK", command=win.destroy,
                 bg=accent, fg="#ffffff", activebackground="#106ebe", activeforeground="#ffffff",
                 font=("Segoe UI", 9), relief="flat", padx=16, pady=4, cursor="hand2",
             ).pack(pady=12)
 
-            # Center and show
-            root.update_idletasks()
-            x = (root.winfo_screenwidth() - root.winfo_width()) // 2
-            y = (root.winfo_screenheight() - root.winfo_height()) // 2
-            root.geometry(f"+{x}+{y}")
-            root.attributes("-topmost", True)
-            root.deiconify()
-            root.mainloop()
+            win.update_idletasks()
+            x = (win.winfo_screenwidth() - win.winfo_width()) // 2
+            y = (win.winfo_screenheight() - win.winfo_height()) // 2
+            win.geometry(f"+{x}+{y}")
+            win.attributes("-topmost", True)
 
-        threading.Thread(target=_show, daemon=True).start()
+        tk_host.run_on_tk(_show)
 
     def _on_quit_click(self, _icon=None, _item=None) -> None:
         """Quit the application — full process exit."""
         logger.info("Quitting application")
+        from . import tk_host
+        tk_host.stop()
         self._updater.stop()
         self._engine._telemetry.app_stop()
         self._engine.shutdown()
