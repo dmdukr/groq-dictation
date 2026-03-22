@@ -105,7 +105,7 @@ class TrayApp:
     def run(self) -> None:
         """Run the tray app. Blocks the main thread."""
         self._icon = Icon(
-            "groq-dictation",
+            "ai-polyglot-kit",
             self._icons[DictationState.IDLE],
             _state_tooltip(DictationState.IDLE),
             menu=self._create_menu(),
@@ -120,8 +120,7 @@ class TrayApp:
         # Register hotkeys
         self._register_hotkeys()
 
-        # Register double Ctrl+C for quick translate
-        keyboard.add_hotkey("ctrl+c", self._on_ctrl_c, suppress=False)
+        # Ctrl+C for quick translate is registered inside _register_hotkeys()
 
         # Select mic device (but don't open stream — opened on demand at key press)
         def _init_mic():
@@ -560,11 +559,10 @@ class TrayApp:
             self._icon.stop()
 
     def _on_about_click(self, _icon=None, _item=None) -> None:
-        """Show About dialog with sv_ttk theme support."""
+        """Show About dialog — plain tk widgets (no sv_ttk to avoid theme corruption)."""
         from .config import APP_VERSION
         from .utils import detect_windows_theme, set_dwm_dark_title_bar, load_translate_settings
         import tkinter as tk
-        from tkinter import ttk as about_ttk
 
         def _show():
             root = tk.Tk()
@@ -573,30 +571,33 @@ class TrayApp:
             root.resizable(False, False)
             root.geometry("300x200")
 
-            # Apply theme
             pref = load_translate_settings().get("theme", "auto")
             is_dark = pref == "dark" or (pref == "auto" and detect_windows_theme() == "dark")
-            try:
-                import sv_ttk
-                sv_ttk.set_theme("dark" if is_dark else "light")
-            except ImportError:
-                pass
+            bg = "#1c1c1c" if is_dark else "#f0f0f0"
+            fg = "#ffffff" if is_dark else "#1a1a1a"
+            accent = "#0078d4"
+
+            root.configure(bg=bg)
             if is_dark:
                 root.update_idletasks()
                 set_dwm_dark_title_bar(root)
 
-            frame = about_ttk.Frame(root, padding=20)
+            frame = tk.Frame(root, bg=bg, padx=20, pady=20)
             frame.pack(fill="both", expand=True)
 
-            about_ttk.Label(
+            tk.Label(
                 frame, text=f"AI Polyglot Kit v{APP_VERSION}",
-                font=("Segoe UI", 12, "bold"),
+                font=("Segoe UI", 12, "bold"), bg=bg, fg=fg,
             ).pack(pady=(0, 12))
-            about_ttk.Label(
+            tk.Label(
                 frame, text="Author: Dmytro Dubinko\nLicense: GPL-3.0\n\ngithub.com/dmdukr/ai-polyglot-kit",
-                font=("Segoe UI", 10), justify="center",
+                font=("Segoe UI", 10), justify="center", bg=bg, fg=fg,
             ).pack()
-            about_ttk.Button(root, text="OK", command=root.destroy, style="Accent.TButton").pack(pady=12)
+            tk.Button(
+                root, text="OK", command=root.destroy,
+                bg=accent, fg="#ffffff", activebackground="#106ebe", activeforeground="#ffffff",
+                font=("Segoe UI", 9), relief="flat", padx=16, pady=4, cursor="hand2",
+            ).pack(pady=12)
 
             # Center and show
             root.update_idletasks()

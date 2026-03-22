@@ -139,12 +139,11 @@ class TranslateOverlay:
             root.configure(bg=T["bg"])
             root.minsize(420, 320)
 
-            # Apply sv_ttk theme for ttk widgets (Combobox)
-            try:
-                import sv_ttk
-                sv_ttk.set_theme("dark" if is_dark else "light")
-            except ImportError:
-                pass
+            # Style ttk Combobox manually (no sv_ttk — avoids theme corruption)
+            style = ttk.Style()
+            if is_dark:
+                style.configure("Translate.TCombobox", foreground=T["text"])
+            lang_combo_style = "Translate.TCombobox"
 
             if is_dark:
                 from .utils import set_dwm_dark_title_bar
@@ -202,6 +201,7 @@ class TranslateOverlay:
             lang_combo = ttk.Combobox(
                 lang_row, textvariable=lang_var, values=lang_names,
                 width=16, state="readonly", font=("Segoe UI", 10),
+                style=lang_combo_style,
             )
             for i, (name, code) in enumerate(LANGUAGES):
                 if code == self._target_lang:

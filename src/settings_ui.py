@@ -84,19 +84,34 @@ def _set_autostart(enabled: bool) -> None:
 class SettingsWindow:
     """Modal settings window with tabs for all configurable options."""
 
+    # Persistent Tk root — shared across all opens to avoid sv_ttk corruption
+    _tk_root: tk.Tk | None = None
+    _theme_applied: str = ""
+
     def __init__(self, config: AppConfig, audio_capture: AudioCapture, on_save=None):
         self._config = config
         self._audio = audio_capture
         self._on_save = on_save
-        self._window: tk.Tk | None = None
+        self._window: tk.Toplevel | None = None
 
     def show(self) -> None:
         """Open settings window in a new thread (non-blocking)."""
         thread = threading.Thread(target=self._build_and_run, daemon=True)
         thread.start()
 
+    @classmethod
+    def _get_root(cls) -> tk.Tk:
+        """Get or create a persistent hidden Tk root."""
+        if cls._tk_root is None or not cls._tk_root.winfo_exists():
+            cls._tk_root = tk.Tk()
+            cls._tk_root.withdraw()
+            cls._theme_applied = ""
+        return cls._tk_root
+
     def _build_and_run(self) -> None:
-        self._window = tk.Tk()
+        root = self._get_root()
+
+        self._window = tk.Toplevel(root)
         self._window.withdraw()  # hide until fully built (prevents jumping)
         self._window.title(t("settings.title"))
         self._window.geometry("740x750")
@@ -112,14 +127,14 @@ class SettingsWindow:
         else:
             self._is_dark = detect_windows_theme() == "dark"
 
-        try:
-            import sv_ttk
-            # Force re-apply theme (clean slate for second+ opens)
-            sv_ttk.set_theme("light")
-            if self._is_dark:
-                sv_ttk.set_theme("dark")
-        except ImportError:
-            pass
+        target_theme = "dark" if self._is_dark else "light"
+        if SettingsWindow._theme_applied != target_theme:
+            try:
+                import sv_ttk
+                sv_ttk.set_theme(target_theme)
+                SettingsWindow._theme_applied = target_theme
+            except ImportError:
+                pass
 
         if self._is_dark:
             self._window.configure(bg="#1c1c1c")
@@ -339,7 +354,12 @@ class SettingsWindow:
         self._window.attributes("-topmost", True)
         self._window.deiconify()
 
-        self._window.mainloop()
+        # Protocol: on close destroy Toplevel and quit mainloop
+        def _on_close():
+            self._window.destroy()
+            self._get_root().quit()
+        self._window.protocol("WM_DELETE_WINDOW", _on_close)
+        self._get_root().mainloop()
 
     # --- Hotkey capture (uses `keyboard` library to detect all keys incl. Win) ---
 
@@ -377,8 +397,8 @@ class SettingsWindow:
         )
         link.pack(side="right")
         def _open_link(event=None, section=readme_section):
-            import os
-            os.startfile("https://github.com/dmdukr/ai-polyglot-kit#" + section)
+            import webbrowser
+            webbrowser.open("https://github.com/dmdukr/ai-polyglot-kit#" + section)
         link.bind("<Button-1>", _open_link)
 
         slot_widgets = []
@@ -719,10 +739,12 @@ class SettingsWindow:
             result["restart"] = True
             dlg.destroy()
             self._window.destroy()
+            self._get_root().quit()
 
         def on_no():
             dlg.destroy()
             self._window.destroy()
+            self._get_root().quit()
 
         ttk.Button(btn_frame, text=t("settings.save"),
                    command=on_yes, style="Accent.TButton").pack(side="left", padx=8)
