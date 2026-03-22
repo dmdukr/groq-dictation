@@ -373,8 +373,10 @@ class SettingsWindow:
             font=("Segoe UI", 8, "underline"), cursor="hand2",
         )
         link.pack(side="right")
-        link.bind("<Button-1>", lambda e, s=readme_section: __import__("webbrowser").open(
-            "https://github.com/dmdukr/ai-polyglot-kit#" + s))
+        def _open_link(event=None, section=readme_section):
+            import os
+            os.startfile("https://github.com/dmdukr/ai-polyglot-kit#" + section)
+        link.bind("<Button-1>", _open_link)
 
         slot_widgets = []
         provider_list = list(ALL_STT_PROVIDERS) if stt else list(ALL_LLM_PROVIDERS)
@@ -395,6 +397,16 @@ class SettingsWindow:
             api_var = tk.StringVar(master=self._window, value=slot_data.get("api_key", ""))
             key_entry = ttk.Entry(row1, textvariable=api_var, show="*")
             key_entry.pack(side="left", fill="x", expand=True, padx=(4, 8))
+            # Ensure Ctrl+V paste works (keyboard hook can interfere)
+            def _paste(event, entry=key_entry, var=api_var):
+                try:
+                    text = entry.clipboard_get()
+                    var.set(text.strip())
+                except tk.TclError:
+                    pass
+                return "break"
+            key_entry.bind("<Control-v>", _paste)
+            key_entry.bind("<Control-V>", _paste)
 
             usage_label = ttk.Label(
                 row1, text=t("settings.provider_not_connected"),

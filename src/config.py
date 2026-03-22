@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "4.0.7"
+APP_VERSION = "4.0.8"
 APP_NAME = "AIPolyglotKit"
 GITHUB_REPO = "dmdukr/ai-polyglot-kit"
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -237,9 +237,13 @@ class AppConfig:
     def validate(self) -> list[str]:
         """Validate config, return list of errors (empty = valid)."""
         errors = []
-        if not self.groq.api_key:
+        # Check for API key in providers OR legacy groq config
+        has_stt_key = self.groq.api_key or any(
+            s.get("api_key") for s in self.providers.stt
+        )
+        if not has_stt_key:
             errors.append(
-                "Groq API key not set. Use GROQ_API_KEY env var, .env file, or config.yaml"
+                "API ключ не налаштовано. Відкрийте Налаштування → STT та додайте ключ"
             )
         if self.audio.vad_aggressiveness not in (0, 1, 2, 3):
             errors.append("vad_aggressiveness must be 0-3")
