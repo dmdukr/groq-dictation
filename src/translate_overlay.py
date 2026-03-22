@@ -49,13 +49,13 @@ THEME_DARK = {
     "text": "#ffffff",           # primary text
     "text_mid": "#999999",       # secondary
     "text_dim": "#666666",       # dimmed
-    "accent": "#4cc2ff",         # Windows dark blue accent
-    "accent_hover": "#2eaadc",
+    "accent": "#0078d4",         # Windows accent blue
+    "accent_hover": "#106ebe",
     "success": "#6ccb5f",        # green
     "danger": "#ff6b6b",         # red
     "info": "#4cc2ff",           # blue
     "border": "#3d3d3d",         # dark border
-    "btn_text": "#1a1a1a",
+    "btn_text": "#ffffff",       # white text on buttons
 }
 
 
@@ -129,6 +129,7 @@ class TranslateOverlay:
     def _build_and_run(self) -> None:
         try:
             T = _get_theme()
+            is_dark = T is THEME_DARK
 
             root = tk.Tk()
             self._window = root
@@ -137,6 +138,18 @@ class TranslateOverlay:
             root.overrideredirect(False)
             root.configure(bg=T["bg"])
             root.minsize(420, 320)
+
+            # Apply sv_ttk theme for ttk widgets (Combobox)
+            try:
+                import sv_ttk
+                sv_ttk.set_theme("dark" if is_dark else "light")
+            except ImportError:
+                pass
+
+            if is_dark:
+                from .utils import set_dwm_dark_title_bar
+                root.update_idletasks()
+                set_dwm_dark_title_bar(root)
 
             # Load saved size
             settings = load_translate_settings()

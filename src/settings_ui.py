@@ -119,11 +119,9 @@ class SettingsWindow:
             pass
 
         if self._is_dark:
+            self._window.configure(bg="#1c1c1c")
             self._window.update_idletasks()
             set_dwm_dark_title_bar(self._window)
-
-        # Colors for manually created tk widgets (hints, usage labels)
-        if self._is_dark:
             self._dark_bg = "#1c1c1c"
             self._dark_fg = "#ffffff"
             self._dark_fg2 = "#9e9e9e"
@@ -258,11 +256,10 @@ class SettingsWindow:
             text=f"{self._silence_var.get()} ms"))
 
         # Feedback hint
-        feedback_hint = tk.Label(
+        feedback_hint = ttk.Label(
             tab_dict, text=t("settings.feedback_hint"),
-            fg=self._dark_fg2 if self._is_dark else "#888888",
-            bg=self._dark_bg if self._is_dark else tab_dict.winfo_toplevel().cget("bg"),
-            font=("Segoe UI", 8), anchor="w", justify="left", wraplength=550,
+            foreground=self._dark_fg2 if self._is_dark else "#888888",
+            font=("Segoe UI", 8), wraplength=550,
         )
         feedback_hint.grid(row=8, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
@@ -355,10 +352,9 @@ class SettingsWindow:
                   foreground="#888888", font=("Segoe UI", 8)).pack(side="left")
 
         readme_section = "stt-providers" if stt else ("translation-providers" if translation else "llm-providers")
-        link = tk.Label(
+        link = ttk.Label(
             hint_frame, text=t("settings.provider_recommended"),
-            fg="#4cc2ff" if self._is_dark else "#0078d4",
-            bg=self._dark_bg if self._is_dark else hint_frame.winfo_toplevel().cget("bg"),
+            foreground="#4cc2ff" if self._is_dark else "#0078d4",
             font=("Segoe UI", 8, "underline"), cursor="hand2",
         )
         link.pack(side="right")
@@ -385,10 +381,9 @@ class SettingsWindow:
             key_entry = ttk.Entry(row1, textvariable=api_var, show="*")
             key_entry.pack(side="left", fill="x", expand=True, padx=(4, 8))
 
-            usage_label = tk.Label(
+            usage_label = ttk.Label(
                 row1, text=t("settings.provider_not_connected"),
-                fg=self._dark_fg2 if self._is_dark else "#888888",
-                bg=self._dark_bg if self._is_dark else row1.winfo_toplevel().cget("bg"),
+                foreground=self._dark_fg2 if self._is_dark else "#888888",
                 font=("Segoe UI", 8), anchor="e", width=18,
             )
             usage_label.pack(side="right")
@@ -419,7 +414,7 @@ class SettingsWindow:
                     mcombo["values"] = []
                     mvar.set("")
                     ulabel.config(text=t("settings.provider_not_connected"),
-                                 fg=self._dark_fg2 or "#888888")
+                                 foreground=self._dark_fg2 or "#888888")
                     return
                 info = detect_provider(key)
                 if info:
@@ -434,14 +429,14 @@ class SettingsWindow:
                                     mcombo.config(values=models)
                                     if not mvar.get():
                                         mvar.set(models[0])
-                                ulabel.config(text=f"{info.name} \u2713", fg="#27ae60")
+                                ulabel.config(text=f"{info.name} \u2713", foreground="#27ae60")
                             self._window.after(0, _update)
                     threading.Thread(target=_fetch, daemon=True).start()
                 else:
                     # Unknown prefix — keep dropdown unlocked for manual selection
                     pcombo.config(state="readonly")
                     ulabel.config(text="? " + t("settings.provider_not_connected"),
-                                 fg="#e67e22")
+                                 foreground="#e67e22")
 
             api_var.trace_add("write", lambda *_, fn=_on_key_change: fn())
 
