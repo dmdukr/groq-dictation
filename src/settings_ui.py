@@ -98,10 +98,15 @@ class SettingsWindow:
         # Prevent opening multiple settings windows
         if SettingsWindow._active_window is not None:
             try:
-                tk_host.run_on_tk(lambda: SettingsWindow._active_window.lift())
-                return
+                if SettingsWindow._active_window.winfo_exists():
+                    tk_host.run_on_tk(lambda: (
+                        SettingsWindow._active_window.deiconify(),
+                        SettingsWindow._active_window.lift(),
+                    ))
+                    return
             except Exception:
-                SettingsWindow._active_window = None
+                pass
+            SettingsWindow._active_window = None
         tk_host.run_on_tk(self._build)
 
     def _close_window(self) -> None:
@@ -699,15 +704,16 @@ class SettingsWindow:
         if self._on_save:
             self._on_save()
 
-        # Restart dialog as Toplevel (same Tk root, no theme conflicts)
-        self._window.withdraw()  # hide settings, keep Tk root alive
+        # Restart dialog as Toplevel on tk_host root
+        from . import tk_host
+        self._close_window()
 
         result = {"restart": False}
 
-        dlg = tk.Toplevel(self._window)
+        dlg = tk.Toplevel(tk_host.get_root())
         dlg.title("AI Polyglot Kit")
         dlg.resizable(False, False)
-        dlg.transient(self._window)
+        dlg.attributes("-topmost", True)
         dlg.grab_set()
 
         if self._is_dark:
@@ -724,11 +730,9 @@ class SettingsWindow:
         def on_yes():
             result["restart"] = True
             dlg.destroy()
-            self._close_window()
 
         def on_no():
             dlg.destroy()
-            self._close_window()
 
         ttk.Button(btn_frame, text=t("settings.save"),
                    command=on_yes, style="Accent.TButton").pack(side="left", padx=8)
