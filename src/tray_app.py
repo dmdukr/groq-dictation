@@ -176,6 +176,9 @@ class TrayApp:
             logger.error(f"Failed to register hotkeys: {e}")
             self._on_error(f"Hotkey registration failed: {e}")
 
+        # Re-register Ctrl+C for quick translate (unhook_all removes it)
+        keyboard.add_hotkey("ctrl+c", self._on_ctrl_c, suppress=False)
+
     def _on_ptt_event(self, event) -> None:
         """Track key presses/releases for push-to-talk combo.
 
