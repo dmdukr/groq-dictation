@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "AI Polyglot Kit — Page Translator",
+  "version": "5.0.0",
+  "description": "Translate web pages using AI Polyglot Kit desktop app",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["http://127.0.0.1:19378/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

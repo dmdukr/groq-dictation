@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <img src="icon48.png" alt="Logo" class="logo">
+    <span class="title">AI Polyglot Kit</span>
+  </div>
+
+  <div id="status" class="status disconnected">
+    <span class="status-dot"></span>
+    <span id="status-text">Checking...</span>
+  </div>
+
+  <div id="controls" class="controls hidden">
+    <label for="lang-select" class="label">Translate to:</label>
+    <select id="lang-select" class="select">
+      <option value="uk">Українська</option>
+      <option value="ru">Русский</option>
+      <option value="en">English</option>
+      <option value="de">Deutsch</option>
+      <option value="fr">Français</option>
+      <option value="es">Español</option>
+      <option value="pl">Polski</option>
+      <option value="it">Italiano</option>
+      <option value="pt">Português</option>
+      <option value="ja">日本語</option>
+      <option value="zh">中文</option>
+      <option value="ko">한국어</option>
+      <option value="tr">Türkçe</option>
+      <option value="ar">العربية</option>
+    </select>
+
+    <button id="translate-btn" class="btn primary">Translate page</button>
+
+    <div id="progress" class="progress hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
