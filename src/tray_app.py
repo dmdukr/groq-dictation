@@ -15,7 +15,9 @@ from pystray import Icon, Menu, MenuItem
 from .config import AppConfig
 from .engine import DictationEngine, DictationState
 from .i18n import t
+from .translate_engine import TranslateEngine
 from .translate_overlay import TranslateOverlay
+from .translate_server import TranslateServer
 from .updater import Updater
 from .utils import normalize_key_name
 
@@ -143,6 +145,14 @@ class TrayApp:
 
         # Start auto-updater
         self._updater.start()
+
+        # Start translation HTTP server for browser extensions
+        engine_te = TranslateEngine(
+            provider_manager=self._engine.get_provider_manager(),
+            groq_config=self._config.groq,
+        )
+        self._translate_server = TranslateServer(engine_te, self._config.server_port)
+        self._translate_server.start()
 
     def _register_hotkeys(self) -> None:
         """Register hotkeys based on config mode."""
@@ -622,6 +632,8 @@ class TrayApp:
         from . import tk_host
         tk_host.stop()
         self._updater.stop()
+        if hasattr(self, '_translate_server'):
+            self._translate_server.stop()
         self._engine._telemetry.app_stop()
         self._engine.shutdown()
         keyboard.unhook_all()

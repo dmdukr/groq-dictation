@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "4.4.0"
+APP_VERSION = "5.0.0"
 APP_NAME = "AIPolyglotKit"
 GITHUB_REPO = "dmdukr/ai-polyglot-kit"
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -134,6 +134,7 @@ class AppConfig:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    server_port: int = 19378
 
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> "AppConfig":
