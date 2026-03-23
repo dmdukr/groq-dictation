@@ -360,6 +360,9 @@ class SettingsWindow:
                   foreground="#888888", font=("Segoe UI", 8), wraplength=550,
                   ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
+        # ── Browser extensions section ────────────────────────────────
+        self._build_browser_section(tab_iface, start_row=10)
+
         tab_iface.columnconfigure(1, weight=1)
 
         # Center on screen and show (was hidden to prevent jumping)
@@ -373,6 +376,58 @@ class SettingsWindow:
         self._window.deiconify()
 
         self._window.protocol("WM_DELETE_WINDOW", self._close_window)
+
+    # ── Browser extension section ─────────────────────────────────────
+
+    def _build_browser_section(self, parent, start_row: int) -> None:
+        """Build the 'Browser extensions' section on the Interface tab."""
+        from .browser_installer import find_browsers, is_extension_installed, install_extension
+
+        ttk.Separator(parent, orient="horizontal").grid(
+            row=start_row, column=0, columnspan=2, sticky="we", pady=(12, 4))
+
+        ttk.Label(parent, text=t("settings.browser_extensions"),
+                  font=("Segoe UI", 9, "bold")).grid(
+            row=start_row + 1, column=0, columnspan=2, sticky="w", pady=(4, 2))
+
+        browsers = find_browsers()
+
+        if not browsers:
+            ttk.Label(parent, text=t("settings.no_browsers_found"),
+                      foreground=self._dark_fg2 if self._is_dark else "#888888",
+                      font=("Segoe UI", 8)).grid(
+                row=start_row + 2, column=0, columnspan=2, sticky="w", pady=2)
+            return
+
+        # Deduplicate by policy_key for display: Vivaldi shares Chrome's key.
+        # We still show each browser, but mark shared-policy browsers.
+        for idx, browser in enumerate(browsers):
+            row = start_row + 2 + idx
+            row_frame = ttk.Frame(parent)
+            row_frame.grid(row=row, column=0, columnspan=2, sticky="w", pady=1)
+
+            ttk.Label(row_frame, text=browser.name, width=10, anchor="w").pack(side="left")
+
+            installed = is_extension_installed(browser)
+
+            if installed:
+                btn = ttk.Button(row_frame, text=f"{t('settings.installed')} \u2713",
+                                 state="disabled", width=16)
+                btn.pack(side="left", padx=(8, 0))
+            else:
+                btn = ttk.Button(row_frame, text=t("settings.install"), width=16)
+                btn.pack(side="left", padx=(8, 0))
+
+                def _do_install(b=browser, button=btn):
+                    try:
+                        install_extension(b)
+                        button.config(text=f"{t('settings.installed')} \u2713", state="disabled")
+                    except Exception as exc:
+                        logger.error("Extension install failed for %s: %s", b.name, exc)
+                        from tkinter import messagebox
+                        messagebox.showerror("Error", f"Install failed: {exc}")
+
+                btn.config(command=_do_install)
 
     # --- Hotkey capture (uses `keyboard` library to detect all keys incl. Win) ---
 

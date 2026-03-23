@@ -353,6 +353,24 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Duplicate API key in slots — use different accounts",
         "uk": "Дублікат API ключа — використовуйте різні акаунти",
     },
+
+    # ── Browser extensions ─────────────────────────────────────────
+    "settings.browser_extensions": {
+        "en": "Browser extensions:",
+        "uk": "Розширення для браузерів:",
+    },
+    "settings.no_browsers_found": {
+        "en": "No browsers found",
+        "uk": "Браузери не знайдено",
+    },
+    "settings.install": {
+        "en": "Install",
+        "uk": "Встановити",
+    },
+    "settings.installed": {
+        "en": "Installed",
+        "uk": "Встановлено",
+    },
 }
 
 # Current language
