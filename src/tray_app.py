@@ -117,9 +117,8 @@ class TrayApp:
         icon.visible = True
         logger.info(f"Tray app started, hotkey: {self._config.hotkey}")
 
-        # Start persistent Tk event loop (shared by Settings, Translate, About)
-        from . import tk_host
-        tk_host.start()
+        # Tk host starts lazily on first GUI open (Settings/Translate/About)
+        # NOT started here to avoid Tk + pystray message loop conflicts during recording
 
         # Register hotkeys
         self._register_hotkeys()

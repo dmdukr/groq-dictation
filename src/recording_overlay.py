@@ -1,14 +1,15 @@
 """Floating overlay window shown during recording with waveform visualization.
 
-Uses the shared tk_host Toplevel — no separate Tk() or mainloop().
-All tkinter operations happen on the Tk host thread via run_on_tk().
+Uses a STANDALONE Tk instance in its own thread — intentionally separate from
+tk_host to avoid segfaults caused by Tk + pystray + keyboard hooks running
+simultaneously. This overlay is short-lived (recording duration only) and
+doesn't use sv_ttk, so a separate Tk instance is safe.
 """
 
 import collections
 import logging
 import queue
 import threading
-import tkinter as tk
 
 from .utils import compute_rms
 
@@ -24,46 +25,58 @@ class RecordingOverlay:
     """Small floating window showing audio waveform and mic name during recording."""
 
     def __init__(self):
+        self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._started_event = threading.Event()
         self._audio_queue: queue.Queue[bytes] | None = None
-        self._window: tk.Toplevel | None = None
 
     def show(self, mic_name: str, audio_queue: queue.Queue[bytes]) -> None:
-        """Show the overlay. Thread-safe — schedules on Tk host thread."""
-        if self._window is not None:
+        """Show the overlay. Thread-safe — can be called from any thread."""
+        if self._thread is not None and self._thread.is_alive():
             return
         self._audio_queue = audio_queue
         self._stop_event.clear()
-        from . import tk_host
-        tk_host.run_on_tk(lambda: self._build(mic_name))
+        self._started_event.clear()
+        self._thread = threading.Thread(
+            target=self._run_overlay,
+            args=(mic_name,),
+            name="RecordingOverlay",
+            daemon=True,
+        )
+        self._thread.start()
+        self._started_event.wait(timeout=2.0)
 
     def hide(self) -> None:
         """Signal the overlay to close. Thread-safe."""
         self._stop_event.set()
 
-    def _build(self, mic_name: str) -> None:
-        """Build the overlay. Runs on Tk host thread."""
-        from . import tk_host
-
+    def _run_overlay(self, mic_name: str) -> None:
+        """Run the overlay in its own tkinter mainloop (runs entirely on this thread)."""
         try:
-            win = tk.Toplevel(tk_host.get_root())
-            self._window = win
-            win.title("")
-            win.overrideredirect(True)
-            win.attributes("-topmost", True)
-            win.attributes("-alpha", 0.9)
-            win.configure(bg="#1a1a2e")
+            import tkinter as tk
+        except Exception as e:
+            logger.error(f"Cannot import tkinter for overlay: {e}")
+            self._started_event.set()
+            return
 
-            # Size and position (bottom-center)
+        root = None
+        try:
+            root = tk.Tk()
+            root.title("")
+            root.overrideredirect(True)
+            root.attributes("-topmost", True)
+            root.attributes("-alpha", 0.9)
+            root.configure(bg="#1a1a2e")
+
             w, h = WAVE_WIDTH + 40, WAVE_HEIGHT + 70
-            win.update_idletasks()
-            screen_w = win.winfo_screenwidth()
-            screen_h = win.winfo_screenheight()
+            root.update_idletasks()
+            screen_w = root.winfo_screenwidth()
+            screen_h = root.winfo_screenheight()
             x = (screen_w - w) // 2
             y = screen_h - h - 80
-            win.geometry(f"{w}x{h}+{x}+{y}")
+            root.geometry(f"{w}x{h}+{x}+{y}")
 
-            frame = tk.Frame(win, bg="#1a1a2e", padx=12, pady=8)
+            frame = tk.Frame(root, bg="#1a1a2e", padx=12, pady=8)
             frame.pack(fill="both", expand=True)
 
             top_frame = tk.Frame(frame, bg="#1a1a2e")
@@ -94,8 +107,7 @@ class RecordingOverlay:
 
             def update():
                 if self._stop_event.is_set():
-                    self._window = None
-                    win.destroy()
+                    root.quit()
                     return
 
                 try:
@@ -126,7 +138,7 @@ class RecordingOverlay:
                 except Exception:
                     pass
 
-                win.after(UPDATE_INTERVAL_MS, update)
+                root.after(UPDATE_INTERVAL_MS, update)
 
             def blink():
                 if self._stop_event.is_set():
@@ -138,13 +150,19 @@ class RecordingOverlay:
                     dot_canvas.create_oval(2, 2, 10, 10, fill=color, outline=color)
                 except Exception:
                     pass
-                win.after(500, blink)
+                root.after(500, blink)
 
-            win.after(UPDATE_INTERVAL_MS, update)
-            win.after(500, blink)
+            self._started_event.set()
+            root.after(UPDATE_INTERVAL_MS, update)
+            root.after(500, blink)
+            root.mainloop()
 
         except Exception as e:
             logger.error(f"Overlay error: {e}")
-            self._window = None
-
-
+        finally:
+            self._started_event.set()
+            if root is not None:
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
