@@ -455,8 +455,15 @@ class TrayApp:
             return
         logger.info("Applying new settings...")
         self._register_hotkeys()
-        # Update mic selection
-        self._engine.get_audio_capture().select_device(self._config.audio.mic_device_index)
+        # Update mic selection — only re-probe if device changed or set to auto
+        ac = self._engine.get_audio_capture()
+        new_idx = self._config.audio.mic_device_index
+        if new_idx is not None:
+            # Explicit device — just set it (no probing)
+            ac._device_index = new_idx
+            logger.info("Mic set to device %d (no re-probe)", new_idx)
+        # If auto (None) — don't re-probe on save, keep current selection
+        # Re-probe happens on next app start or mic disconnect
         # Refresh menu
         if self._icon:
             self._icon.menu = self._create_menu()

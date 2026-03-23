@@ -195,7 +195,7 @@ def check_text_quality(text: str, previous_text: str = "",
     # Real speech has mostly letters; hallucinations often have high punctuation/symbol ratio
     letters = sum(1 for c in text if c.isalpha())
     total = len(text.strip())
-    if total > 0 and letters / total < 0.5:
+    if total > 0 and letters / total < 0.35:
         logger.info("Low letter ratio (%.0f%%): %r", letters / total * 100, text[:50])
         return None
 

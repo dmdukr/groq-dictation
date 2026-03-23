@@ -65,7 +65,11 @@ class DictationEngine:
         self._profile.load()
         # Provider manager (multi-slot fallback for STT + LLM)
         self._quota_callback: Callable[[int, int], None] | None = None
-        self._providers = ProviderManager(config.providers, on_quota_warning=self._on_quota_warning)
+        self._providers = ProviderManager(
+            config.providers,
+            on_quota_warning=self._on_quota_warning,
+            stt_language=config.groq.stt_language or "",
+        )
 
         # Normalizer uses LLM connector from provider manager
         llm = self._providers.get_llm()

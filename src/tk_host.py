@@ -61,6 +61,12 @@ def _apply_theme_inner() -> None:
             import sv_ttk
             sv_ttk.set_theme(target)
             _theme_applied = target
+            # Update root bg so new Toplevels inherit correct color
+            if _root:
+                from tkinter import ttk
+                bg = ttk.Style().lookup("TFrame", "background")
+                if bg:
+                    _root.configure(bg=bg)
             logger.info("sv_ttk theme: %s", target)
         except ImportError:
             pass

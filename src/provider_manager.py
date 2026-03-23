@@ -12,7 +12,7 @@ from .providers import detect_provider, STT_PROVIDERS
 logger = logging.getLogger(__name__)
 
 
-def _create_stt_connector(slot: dict, on_quota_warning=None) -> STTConnector | None:
+def _create_stt_connector(slot: dict, on_quota_warning=None, language: str = "") -> STTConnector | None:
     """Create an STT connector from a provider slot config dict."""
     api_key = slot.get("api_key", "")
     if not api_key:
@@ -55,6 +55,7 @@ def _create_stt_connector(slot: dict, on_quota_warning=None) -> STTConnector | N
         base_url=base_url,
         api_key=api_key,
         model=model,
+        language=language,
         on_quota_warning=on_quota_warning,
     )
 
@@ -86,9 +87,10 @@ def _create_llm_connector(slot: dict) -> LLMConnector | None:
 class ProviderManager:
     """Manages 3-slot fallback chains for STT, LLM normalization, and translation."""
 
-    def __init__(self, providers_config, on_quota_warning=None):
+    def __init__(self, providers_config, on_quota_warning=None, stt_language: str = ""):
         self._config = providers_config
         self._on_quota_warning = on_quota_warning
+        self._stt_language = stt_language
 
         # Active connector caches (lazy init)
         self._stt_connectors: list[STTConnector | None] = [None, None, None]
@@ -130,7 +132,7 @@ class ProviderManager:
         if self._stt_connectors[idx]:
             return self._stt_connectors[idx]
         slot = self._config.stt[idx] if idx < len(self._config.stt) else {}
-        conn = _create_stt_connector(slot, self._on_quota_warning)
+        conn = _create_stt_connector(slot, self._on_quota_warning, language=self._stt_language)
         self._stt_connectors[idx] = conn
         return conn
 

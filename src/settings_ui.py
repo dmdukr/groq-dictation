@@ -129,14 +129,35 @@ class SettingsWindow:
         self._window.resizable(True, True)
         self._window.minsize(700, 650)
 
-        # Theme from tk_host (applied once at startup)
+        # Force re-apply sv_ttk theme — this resets ALL style overrides
+        # from previous opens (dark overrides won't bleed into light mode)
+        try:
+            import sv_ttk
+            from .utils import detect_windows_theme, load_translate_settings
+            pref = load_translate_settings().get("theme", "auto")
+            if pref == "dark":
+                target = "dark"
+            elif pref == "light":
+                target = "light"
+            else:
+                target = "dark" if detect_windows_theme() == "dark" else "light"
+            sv_ttk.set_theme(target)
+            # Update tk_host state + root bg to match
+            import src.tk_host as _tkh
+            _tkh._theme_applied = target
+            bg = ttk.Style().lookup("TFrame", "background")
+            if bg:
+                root.configure(bg=bg)
+        except Exception:
+            pass
+
         self._is_dark = tk_host.is_dark()
 
         if self._is_dark:
             self._window.configure(bg="#1c1c1c")
             self._window.update_idletasks()
             set_dwm_dark_title_bar(self._window)
-            # Override sv_ttk dark backgrounds to be darker
+            # Override sv_ttk dark backgrounds to be even darker
             style = ttk.Style()
             dark_bg = "#1c1c1c"
             style.configure("TFrame", background=dark_bg)
@@ -155,9 +176,10 @@ class SettingsWindow:
             self._dark_fg = "#ffffff"
             self._dark_fg2 = "#9e9e9e"
         else:
+            # Light mode — sv_ttk.set_theme("light") handles everything
             self._dark_bg = None
             self._dark_fg = None
-            self._dark_fg2 = "#888888"
+            self._dark_fg2 = "#555555"
 
         # --- Buttons (fixed at bottom, pack FIRST so notebook gets remaining space) ---
         btn_frame = ttk.Frame(self._window)
@@ -701,53 +723,9 @@ class SettingsWindow:
         # Save DeepL key
         self._save_deepl_key()
 
-        if self._on_save:
-            self._on_save()
-
-        # Restart dialog as Toplevel on tk_host root
-        from . import tk_host
         self._close_window()
 
-        result = {"restart": False}
-
-        dlg = tk.Toplevel(tk_host.get_root())
-        dlg.title("AI Polyglot Kit")
-        dlg.resizable(False, False)
-        dlg.attributes("-topmost", True)
-        dlg.grab_set()
-
-        if self._is_dark:
-            dlg.configure(bg="#1c1c1c")
-            dlg.update_idletasks()
-            set_dwm_dark_title_bar(dlg)
-
-        ttk.Label(dlg, text=t("settings.restart_prompt"),
-                  font=("Segoe UI", 10), wraplength=360).pack(padx=20, pady=(20, 16))
-
-        btn_frame = ttk.Frame(dlg)
-        btn_frame.pack(pady=(0, 16))
-
-        def on_yes():
-            result["restart"] = True
-            dlg.destroy()
-
-        def on_no():
-            dlg.destroy()
-
-        ttk.Button(btn_frame, text=t("settings.save"),
-                   command=on_yes, style="Accent.TButton").pack(side="left", padx=8)
-        ttk.Button(btn_frame, text=t("settings.cancel"),
-                   command=on_no).pack(side="left", padx=8)
-
-        dlg.protocol("WM_DELETE_WINDOW", on_no)
-        dlg.update_idletasks()
-        x = (dlg.winfo_screenwidth() - dlg.winfo_width()) // 2
-        y = (dlg.winfo_screenheight() - dlg.winfo_height()) // 2
-        dlg.geometry(f"+{x}+{y}")
-        dlg.attributes("-topmost", True)
-        dlg.wait_window()
-
-        if result["restart"] and self._on_save:
+        if self._on_save:
             self._on_save(restart=True)
 
     def _write_config(self) -> None:

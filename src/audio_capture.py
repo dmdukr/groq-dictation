@@ -94,6 +94,7 @@ class AudioCapture:
 
         self._pa: pyaudio.PyAudio | None = None
         self._pa_lock = threading.Lock()  # protect PyAudio init/terminate
+        self._devices_cache: list[AudioDevice] | None = None
         self._stream: pyaudio.Stream | None = None
         self._queue: queue.Queue[bytes] = queue.Queue()
         self._extra_queues: list[queue.Queue[bytes]] = []
@@ -124,12 +125,8 @@ class AudioCapture:
             pass
 
     def refresh_devices(self) -> None:
-        """Re-initialize PyAudio to pick up newly connected devices.
-
-        Instead of terminate+reinit (segfault-prone), create a temporary
-        PyAudio instance for scanning. The main _pa is only used for streaming.
-        """
-        pass  # no-op; list_devices uses a temp PA instance now
+        """Mark device cache as stale so next list_devices() rescans."""
+        self._devices_cache = None
 
     def list_devices(self) -> list[AudioDevice]:
         """Enumerate real input audio devices (filtered, no duplicates).
@@ -137,11 +134,16 @@ class AudioCapture:
         Prefers MME devices (hostApi=0), but also includes WASAPI/WDM-KS
         devices (Bluetooth headsets) that have no MME counterpart.
         Skips virtual/system entries.
+
+        Uses shared _pa with lock (no terminate/reinit — prevents segfaults).
+        Results are cached; call refresh_devices() to invalidate.
         """
-        # Use a temporary PyAudio instance for device scanning.
-        # This avoids terminate/reinit of the shared _pa (segfault-prone).
-        tmp_pa = pyaudio.PyAudio()
-        try:
+        if self._devices_cache is not None:
+            return list(self._devices_cache)
+
+        with self._pa_lock:
+            pa = self._ensure_pa()
+
             skip_substrings = [
                 "sound mapper",
                 "primary sound",
@@ -152,8 +154,8 @@ class AudioCapture:
             mme_devices: list[AudioDevice] = []
             other_devices: list[AudioDevice] = []
 
-            for i in range(tmp_pa.get_device_count()):
-                info = tmp_pa.get_device_info_by_index(i)
+            for i in range(pa.get_device_count()):
+                info = pa.get_device_info_by_index(i)
                 max_input_ch = int(info.get("maxInputChannels", 0))
                 if max_input_ch < 1:
                     continue
@@ -184,12 +186,8 @@ class AudioCapture:
                     devices.append(d)
                     mme_names.add(short_name)
 
-            return devices
-        finally:
-            try:
-                tmp_pa.terminate()
-            except Exception:
-                pass
+            self._devices_cache = devices
+            return list(devices)
 
     def select_device(self, index: int | None) -> AudioDevice | None:
         """Select a specific input device by index.
@@ -423,6 +421,7 @@ class AudioCapture:
         Returns the new external device, or None.
         """
         try:
+            self.refresh_devices()  # invalidate cache before scanning
             devices = self.list_devices()
             for dev in devices:
                 if dev.name not in known_device_names and self._is_external_mic(dev):
