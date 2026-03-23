@@ -78,7 +78,10 @@ def refresh_theme() -> None:
 
 
 def run_on_tk(callback) -> None:
-    """Schedule a callback on the Tk event loop. Thread-safe."""
+    """Schedule a callback on the Tk event loop. Thread-safe. Auto-starts host."""
+    global _root
+    if _root is None:
+        start()
     if _root:
         _root.after(0, callback)
 
