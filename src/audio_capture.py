@@ -93,6 +93,7 @@ class AudioCapture:
         self._frame_bytes: int = self._frame_samples * SAMPLE_WIDTH
 
         self._pa: pyaudio.PyAudio | None = None
+        self._pa_lock = threading.Lock()  # protect PyAudio init/terminate
         self._stream: pyaudio.Stream | None = None
         self._queue: queue.Queue[bytes] = queue.Queue()
         self._extra_queues: list[queue.Queue[bytes]] = []
@@ -123,16 +124,12 @@ class AudioCapture:
             pass
 
     def refresh_devices(self) -> None:
-        """Re-initialize PyAudio to pick up newly connected devices."""
-        if self._running:
-            return  # don't re-init while streaming
-        if self._pa is not None:
-            try:
-                self._pa.terminate()
-            except Exception:
-                pass
-            self._pa = None
-        self._ensure_pa()
+        """Re-initialize PyAudio to pick up newly connected devices.
+
+        Instead of terminate+reinit (segfault-prone), create a temporary
+        PyAudio instance for scanning. The main _pa is only used for streaming.
+        """
+        pass  # no-op; list_devices uses a temp PA instance now
 
     def list_devices(self) -> list[AudioDevice]:
         """Enumerate real input audio devices (filtered, no duplicates).
@@ -141,56 +138,58 @@ class AudioCapture:
         devices (Bluetooth headsets) that have no MME counterpart.
         Skips virtual/system entries.
         """
-        self.refresh_devices()  # re-scan for new devices
-        pa = self._ensure_pa()
+        # Use a temporary PyAudio instance for device scanning.
+        # This avoids terminate/reinit of the shared _pa (segfault-prone).
+        tmp_pa = pyaudio.PyAudio()
+        try:
+            skip_substrings = [
+                "sound mapper",
+                "primary sound",
+                "stereo mix",
+                "pc speaker",
+            ]
 
-        # Substrings to skip (system virtual devices, not real microphones)
-        skip_substrings = [
-            "sound mapper",
-            "primary sound",
-            "stereo mix",
-            "pc speaker",
-        ]
+            mme_devices: list[AudioDevice] = []
+            other_devices: list[AudioDevice] = []
 
-        # Collect all input devices grouped by hostApi
-        mme_devices: list[AudioDevice] = []
-        other_devices: list[AudioDevice] = []
+            for i in range(tmp_pa.get_device_count()):
+                info = tmp_pa.get_device_info_by_index(i)
+                max_input_ch = int(info.get("maxInputChannels", 0))
+                if max_input_ch < 1:
+                    continue
+                name = str(info["name"])
+                name_lower = name.lower()
+                if any(s in name_lower for s in skip_substrings):
+                    continue
 
-        for i in range(pa.get_device_count()):
-            info = pa.get_device_info_by_index(i)
-            max_input_ch = int(info.get("maxInputChannels", 0))
-            if max_input_ch < 1:
-                continue
-            name = str(info["name"])
-            name_lower = name.lower()
-            if any(s in name_lower for s in skip_substrings):
-                continue
+                device = AudioDevice(
+                    index=i,
+                    name=name,
+                    channels=max_input_ch,
+                    default_sample_rate=float(info["defaultSampleRate"]),
+                )
 
-            device = AudioDevice(
-                index=i,
-                name=name,
-                channels=max_input_ch,
-                default_sample_rate=float(info["defaultSampleRate"]),
-            )
+                host_api = int(info.get("hostApi", -1))
+                if host_api == 0:  # MME
+                    mme_devices.append(device)
+                else:
+                    other_devices.append(device)
 
-            host_api = int(info.get("hostApi", -1))
-            if host_api == 0:  # MME
-                mme_devices.append(device)
-            else:
-                other_devices.append(device)
+            devices = list(mme_devices)
+            mme_names = {d.name.lower()[:20] for d in mme_devices}
 
-        # Start with MME devices (preferred, no duplicates)
-        devices = list(mme_devices)
-        mme_names = {d.name.lower()[:20] for d in mme_devices}
+            for d in other_devices:
+                short_name = d.name.lower()[:20]
+                if short_name not in mme_names:
+                    devices.append(d)
+                    mme_names.add(short_name)
 
-        # Add non-MME devices that have no MME counterpart (e.g. Bluetooth)
-        for d in other_devices:
-            short_name = d.name.lower()[:20]
-            if short_name not in mme_names:
-                devices.append(d)
-                mme_names.add(short_name)  # prevent further duplicates
-
-        return devices
+            return devices
+        finally:
+            try:
+                tmp_pa.terminate()
+            except Exception:
+                pass
 
     def select_device(self, index: int | None) -> AudioDevice | None:
         """Select a specific input device by index.
@@ -446,13 +445,14 @@ class AudioCapture:
         instance must not be reused.
         """
         self.stop()
-        if self._pa is not None:
-            try:
-                self._pa.terminate()
-            except Exception:
-                logger.exception("Error terminating PyAudio")
-            finally:
-                self._pa = None
+        with self._pa_lock:
+            if self._pa is not None:
+                try:
+                    self._pa.terminate()
+                except Exception:
+                    logger.exception("Error terminating PyAudio")
+                finally:
+                    self._pa = None
 
     # ── Private helpers ─────────────────────────────────────────────────
 
