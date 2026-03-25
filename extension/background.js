@@ -49,8 +49,8 @@ async function translateBatch(texts, lang, token) {
     signal: AbortSignal.timeout(60000),
   });
 
-  if (resp.status === 401) {
-    // Token expired — clear and re-fetch
+  if (resp.status === 401 || resp.status === 403) {
+    // Token expired or invalid — clear and re-fetch
     await clearToken();
     const newToken = await fetchToken();
     const retry = await fetch(`${API_BASE}/translate`, {

@@ -51,10 +51,8 @@ class TranslateServer:
             self._server.shutdown()
             logger.info("Translation server stopped")
 
-    def issue_token(self) -> str | None:
-        """Issue a one-time bearer token. Returns None if already issued."""
-        if self._token_issued:
-            return None
+    def issue_token(self) -> str:
+        """Issue a bearer token. Re-issues a new token on each call."""
         self._token = secrets.token_hex(32)
         self._token_issued = True
         return self._token
@@ -127,10 +125,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/token":
             token = self._ts.issue_token()
-            if token is None:
-                self._json_response(403, {"error": "token already issued"})
-            else:
-                self._json_response(200, {"token": token})
+            self._json_response(200, {"token": token})
 
         elif self.path == "/extension/update.xml":
             # Stub — will be finished in Task 5
@@ -191,7 +186,7 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 return
 
-            target_lang = payload.get("target_lang", "uk")
+            target_lang = payload.get("target_lang") or payload.get("lang") or "uk"
             source_lang = payload.get("source_lang", "auto")
 
             try:
