@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Groq Dictation — onedir mode (no _MEI temp extraction)."""
+"""PyInstaller spec for AI Polyglot Kit -- onedir mode."""
 
 import os
 import sys
@@ -14,7 +14,7 @@ a = Analysis(
     datas=[
         ('config.yaml', '.'),
         ('extension', 'extension'),
-        ('.venv312/Lib/site-packages/sv_ttk', 'sv_ttk'),
+        (str(Path(sys.prefix) / 'Lib' / 'site-packages' / 'sv_ttk'), 'sv_ttk'),
     ],
     hiddenimports=[
         'pystray._win32',
@@ -48,7 +48,7 @@ a = Analysis(
         '_tkinter',
         'sv_ttk',
     ],
-    hookspath=[],
+    hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
@@ -73,7 +73,7 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    [],  # no binaries/datas in exe — they go into COLLECT
+    [],  # no binaries/datas in exe -- they go into COLLECT
     name='AIPolyglotKit',
     debug=False,
     bootloader_ignore_signals=False,
