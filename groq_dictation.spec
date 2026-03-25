@@ -13,6 +13,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config.yaml', '.'),
+        ('extension', 'extension'),
         ('.venv312/Lib/site-packages/sv_ttk', 'sv_ttk'),
     ],
     hiddenimports=[
