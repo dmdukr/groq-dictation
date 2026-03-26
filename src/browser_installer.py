@@ -1,31 +1,22 @@
-"""Browser extension installer — detect Chromium browsers and manage HKCU policy."""
+"""Browser extension installer — detect Chromium browsers and install extension."""
 
 from __future__ import annotations
 
 import logging
-import shutil
+import subprocess
+import sys
 import winreg
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import APP_DIR
-
 logger = logging.getLogger(__name__)
 
-# Extension ID placeholder (will be computed from PEM key later)
-EXTENSION_ID = "apkpgtranslatorext"
 
-# The update URL served by our local HTTP server
-UPDATE_URL = "http://127.0.0.1:19378/extension/update.xml"
-
-# Full forcelist value: "<id>;<update_url>"
-_FORCELIST_VALUE = f"{EXTENSION_ID};{UPDATE_URL}"
-
-# Where the extension files are copied for serving
-_EXTENSION_DEST = APP_DIR / "extension"
-
-# Source extension directory (relative to project root)
-_EXTENSION_SRC = Path(__file__).parent.parent / "extension"
+def _get_extension_dir() -> Path:
+    """Return path to the bundled extension directory."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "extension"  # type: ignore[attr-defined]
+    return Path(__file__).parent.parent / "extension"
 
 
 @dataclass
@@ -34,14 +25,17 @@ class BrowserInfo:
 
     name: str
     exe_path: Path | None
-    policy_key: str  # HKCU registry path for ExtensionInstallForcelist
+    extensions_url: str  # e.g. chrome://extensions
+    profile_dir: Path | None = None
 
 
 # ── Browser definitions ───────────────────────────────────────────────
 
-_LOCALAPPDATA = Path.home() / "AppData" / "Local"
-_PROGRAMFILES = Path("C:/Program Files")
-_PROGRAMFILES86 = Path("C:/Program Files (x86)")
+import os as _os
+
+_LOCALAPPDATA = Path(_os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+_PROGRAMFILES = Path(_os.environ.get("PROGRAMFILES", "C:/Program Files"))
+_PROGRAMFILES86 = Path(_os.environ.get("PROGRAMFILES(X86)", "C:/Program Files (x86)"))
 
 
 def _find_exe_registry(subkey: str, value_name: str = "") -> Path | None:
@@ -76,9 +70,8 @@ def _detect_chrome() -> BrowserInfo | None:
     )
     if exe:
         return BrowserInfo(
-            name="Chrome",
-            exe_path=exe,
-            policy_key=r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist",
+            name="Chrome", exe_path=exe, extensions_url="chrome://extensions",
+            profile_dir=_LOCALAPPDATA / "Google" / "Chrome" / "User Data",
         )
     return None
 
@@ -93,9 +86,8 @@ def _detect_edge() -> BrowserInfo | None:
     )
     if exe:
         return BrowserInfo(
-            name="Edge",
-            exe_path=exe,
-            policy_key=r"SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist",
+            name="Edge", exe_path=exe, extensions_url="edge://extensions",
+            profile_dir=_LOCALAPPDATA / "Microsoft" / "Edge" / "User Data",
         )
     return None
 
@@ -106,11 +98,9 @@ def _detect_vivaldi() -> BrowserInfo | None:
         _PROGRAMFILES / "Vivaldi" / "Application" / "vivaldi.exe",
     )
     if exe:
-        # Vivaldi uses Chrome's policy key
         return BrowserInfo(
-            name="Vivaldi",
-            exe_path=exe,
-            policy_key=r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist",
+            name="Vivaldi", exe_path=exe, extensions_url="vivaldi://extensions",
+            profile_dir=_LOCALAPPDATA / "Vivaldi" / "User Data",
         )
     return None
 
@@ -122,9 +112,8 @@ def _detect_brave() -> BrowserInfo | None:
     )
     if exe:
         return BrowserInfo(
-            name="Brave",
-            exe_path=exe,
-            policy_key=r"SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist",
+            name="Brave", exe_path=exe, extensions_url="brave://extensions",
+            profile_dir=_LOCALAPPDATA / "BraveSoftware" / "Brave-Browser" / "User Data",
         )
     return None
 
@@ -136,9 +125,8 @@ def _detect_opera() -> BrowserInfo | None:
     )
     if exe:
         return BrowserInfo(
-            name="Opera",
-            exe_path=exe,
-            policy_key=r"SOFTWARE\Policies\Opera Software\Opera Stable\ExtensionInstallForcelist",
+            name="Opera", exe_path=exe, extensions_url="opera://extensions",
+            profile_dir=_LOCALAPPDATA / "Opera Software" / "Opera Stable",
         )
     return None
 
@@ -164,106 +152,123 @@ def find_browsers() -> list[BrowserInfo]:
     return browsers
 
 
-def _read_forcelist_values(policy_key: str) -> dict[str, str]:
-    """Read all values from an ExtensionInstallForcelist registry key.
-
-    Returns {value_name: value_data} dict.
-    """
-    result: dict[str, str] = {}
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, policy_key, 0,
-                            winreg.KEY_READ) as key:
-            idx = 0
-            while True:
-                try:
-                    name, data, _ = winreg.EnumValue(key, idx)
-                    result[name] = data
-                    idx += 1
-                except OSError:
-                    break
-    except FileNotFoundError:
-        pass
-    except OSError as exc:
-        logger.debug("Cannot read %s: %s", policy_key, exc)
-    return result
-
-
 def is_extension_installed(browser: BrowserInfo) -> bool:
-    """Check if our extension's update URL is present in the browser's forcelist."""
-    values = _read_forcelist_values(browser.policy_key)
-    return any(UPDATE_URL in v for v in values.values())
-
-
-def _copy_extension_files() -> None:
-    """Copy extension/ directory to %APPDATA%/AIPolyglotKit/extension/."""
-    if not _EXTENSION_SRC.is_dir():
-        logger.warning("Extension source not found at %s", _EXTENSION_SRC)
-        return
-    _EXTENSION_DEST.parent.mkdir(parents=True, exist_ok=True)
-    if _EXTENSION_DEST.exists():
-        shutil.rmtree(_EXTENSION_DEST)
-    shutil.copytree(_EXTENSION_SRC, _EXTENSION_DEST)
-    logger.info("Extension files copied to %s", _EXTENSION_DEST)
-
-
-def _create_key_recursive(hive, subkey: str):
-    """Create registry key and all intermediate parents under hive."""
-    return winreg.CreateKeyEx(hive, subkey, 0, winreg.KEY_SET_VALUE | winreg.KEY_READ)
+    """Check if AI Polyglot Kit extension is loaded in the browser profile."""
+    if not browser.profile_dir:
+        return False
+    # Chrome stores extension data in Secure Preferences (not Preferences)
+    for prefs_name in ("Secure Preferences", "Preferences"):
+        prefs = browser.profile_dir / "Default" / prefs_name
+        if not prefs.exists():
+            continue
+        try:
+            import json
+            data = json.loads(prefs.read_text(encoding="utf-8"))
+            extensions = data.get("extensions", {}).get("settings", {})
+            for _ext_id, ext_data in extensions.items():
+                # Check by manifest name
+                manifest = ext_data.get("manifest", {})
+                if "AI Polyglot Kit" in manifest.get("name", ""):
+                    return True
+                # Check by path (unpacked extensions may lack manifest in prefs)
+                ext_path = ext_data.get("path", "")
+                if "extension" in ext_path and "AI Polyglot Kit" in ext_path:
+                    return True
+        except Exception as e:
+            logger.debug("Could not check extension status for %s: %s", browser.name, e)
+    return False
 
 
 def install_extension(browser: BrowserInfo) -> None:
-    """Install the extension for a browser via HKCU registry policy.
+    """Show install instructions dialog with action buttons."""
+    ext_dir = _get_extension_dir()
+    if not ext_dir.exists() or not (ext_dir / "manifest.json").exists():
+        raise FileNotFoundError(f"Extension not found at {ext_dir}")
 
-    1. Copies extension files to %APPDATA%/AIPolyglotKit/extension/
-    2. Adds our forcelist entry to the browser's policy key
-    """
-    # Step 1: copy extension files
-    _copy_extension_files()
+    ext_path = str(ext_dir)
 
-    # Step 2: find next available slot number in forcelist
-    values = _read_forcelist_values(browser.policy_key)
+    import tkinter as tk
+    from tkinter import ttk
 
-    # Don't install if already present
-    if any(UPDATE_URL in v for v in values.values()):
-        logger.info("Extension already installed for %s", browser.name)
-        return
+    dlg = tk.Toplevel()
+    dlg.title(f"Install Extension — {browser.name}")
+    dlg.attributes("-topmost", True)
+    dlg.resizable(False, False)
 
-    # Find next numeric slot (values are named "1", "2", "3", ...)
-    used_slots = set()
-    for name in values:
-        try:
-            used_slots.add(int(name))
-        except ValueError:
-            pass
-    next_slot = 1
-    while next_slot in used_slots:
-        next_slot += 1
+    frame = ttk.Frame(dlg, padding=16)
+    frame.pack(fill="both", expand=True)
 
-    # Step 3: write the registry value
-    try:
-        with _create_key_recursive(winreg.HKEY_CURRENT_USER, browser.policy_key) as key:
-            winreg.SetValueEx(key, str(next_slot), 0, winreg.REG_SZ, _FORCELIST_VALUE)
-        logger.info("Extension installed for %s (slot %d)", browser.name, next_slot)
-    except OSError as exc:
-        logger.error("Failed to install extension for %s: %s", browser.name, exc)
-        raise
+    def _copy_to_clipboard(text: str, label: ttk.Label) -> None:
+        dlg.clipboard_clear()
+        dlg.clipboard_append(text)
+        label.config(text="Copied!")
+        dlg.after(1500, lambda: label.config(text=""))
 
+    def _open_browser() -> None:
+        if browser.exe_path:
+            try:
+                subprocess.Popen([str(browser.exe_path)])
+            except Exception as e:
+                logger.error("Failed to open %s: %s", browser.name, e)
 
-def uninstall_extension(browser: BrowserInfo) -> None:
-    """Remove our extension entry from the browser's ExtensionInstallForcelist."""
-    values = _read_forcelist_values(browser.policy_key)
-    to_remove = [name for name, data in values.items() if UPDATE_URL in data]
+    # Step 1: Open extensions page
+    ttk.Label(frame, text="Step 1:", font=("Segoe UI", 9, "bold")).grid(
+        row=0, column=0, sticky="nw", pady=(0, 4))
+    step1_frame = ttk.Frame(frame)
+    step1_frame.grid(row=0, column=1, sticky="w", pady=(0, 4))
+    ttk.Label(step1_frame, text=f"Open {browser.extensions_url} in {browser.name}").pack(
+        side="left")
 
-    if not to_remove:
-        logger.info("Extension not found in %s forcelist", browser.name)
-        return
+    s1_status = ttk.Label(step1_frame, text="", foreground="green")
+    s1_status.pack(side="left", padx=(8, 0))
 
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, browser.policy_key, 0,
-                            winreg.KEY_SET_VALUE) as key:
-            for name in to_remove:
-                winreg.DeleteValue(key, name)
-                logger.info("Removed extension slot '%s' from %s", name, browser.name)
-    except OSError as exc:
-        logger.error("Failed to uninstall extension for %s: %s", browser.name, exc)
-        raise
+    btn_frame1 = ttk.Frame(frame)
+    btn_frame1.grid(row=1, column=1, sticky="w", pady=(0, 12))
+    ttk.Button(btn_frame1, text=f"Copy URL",
+               command=lambda: _copy_to_clipboard(browser.extensions_url, s1_status)).pack(
+        side="left", padx=(0, 8))
+    ttk.Button(btn_frame1, text=f"Open {browser.name}",
+               command=_open_browser).pack(side="left")
+
+    # Step 2: Developer mode
+    ttk.Label(frame, text="Step 2:", font=("Segoe UI", 9, "bold")).grid(
+        row=2, column=0, sticky="nw", pady=(0, 4))
+    ttk.Label(frame, text="Enable 'Developer mode' (top-right toggle)").grid(
+        row=2, column=1, sticky="w", pady=(0, 12))
+
+    # Step 3: Load unpacked
+    ttk.Label(frame, text="Step 3:", font=("Segoe UI", 9, "bold")).grid(
+        row=3, column=0, sticky="nw", pady=(0, 4))
+    step3_frame = ttk.Frame(frame)
+    step3_frame.grid(row=3, column=1, sticky="w", pady=(0, 4))
+    ttk.Label(step3_frame, text="Click 'Load unpacked' and select extension folder:").pack(
+        side="left")
+
+    s3_status = ttk.Label(step3_frame, text="", foreground="green")
+    s3_status.pack(side="left", padx=(8, 0))
+
+    path_frame = ttk.Frame(frame)
+    path_frame.grid(row=4, column=1, sticky="w", pady=(0, 4))
+    path_entry = ttk.Entry(path_frame, width=50)
+    path_entry.insert(0, ext_path)
+    path_entry.config(state="readonly")
+    path_entry.pack(side="left")
+
+    ttk.Button(path_frame, text="Copy Path",
+               command=lambda: _copy_to_clipboard(ext_path, s3_status)).pack(
+        side="left", padx=(8, 0))
+
+    # Close button
+    ttk.Button(frame, text="Close", command=dlg.destroy).grid(
+        row=5, column=0, columnspan=2, pady=(16, 0))
+
+    # Center dialog on screen
+    dlg.update_idletasks()
+    w = dlg.winfo_width()
+    h = dlg.winfo_height()
+    x = (dlg.winfo_screenwidth() // 2) - (w // 2)
+    y = (dlg.winfo_screenheight() // 2) - (h // 2)
+    dlg.geometry(f"+{x}+{y}")
+
+    dlg.grab_set()
+    dlg.wait_window()

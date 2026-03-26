@@ -12,6 +12,42 @@
 
   let isTranslated = false;
 
+  /* ---------- Badge helpers ---------- */
+
+  function setBadge(text, color) {
+    chrome.action.setBadgeText({ text });
+    if (color) chrome.action.setBadgeBackgroundColor({ color });
+  }
+
+  function setTitle(title) {
+    chrome.action.setTitle({ title });
+  }
+
+  /* ---------- Ensure content script ---------- */
+
+  async function ensureContentScript(tabId) {
+    try {
+      await chrome.tabs.sendMessage(tabId, { action: "getState" });
+      return true;
+    } catch {
+      // Content script not injected, inject it now
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content.js"],
+        });
+        // Wait for content script to initialize its message listener
+        await new Promise((r) => setTimeout(r, 200));
+        // Verify it's ready
+        await chrome.tabs.sendMessage(tabId, { action: "getState" });
+        return true;
+      } catch (e) {
+        console.error("[APK:popup] Cannot inject content script:", e);
+        return false;
+      }
+    }
+  }
+
   /* ---------- Init ---------- */
 
   async function init() {
@@ -28,9 +64,11 @@
     const resp = await chrome.runtime.sendMessage({ action: "health" });
     if (resp && resp.connected) {
       setConnected();
+      setBadge("T", "#607D8B");
       await checkPageState();
     } else {
       setDisconnected();
+      setBadge("", "");
     }
 
     // Button handler
@@ -62,12 +100,14 @@
       if (resp && resp.translated) {
         isTranslated = true;
         setRevertMode();
+        const lang = langSelect.value || "?";
+        setBadge(lang, "#4CAF50");
+        setTitle(`AI Polyglot Kit — translated to ${lang}`);
       } else {
         isTranslated = false;
         setTranslateMode();
       }
     } catch {
-      // Content script may not be injected (e.g. chrome:// pages)
       isTranslated = false;
       setTranslateMode();
     }
@@ -105,27 +145,69 @@
       }
       isTranslated = false;
       setTranslateMode();
+      setBadge("T", "#607D8B");
+      setTitle("AI Polyglot Kit");
       progressEl.classList.add("hidden");
     } else {
       // Translate
-      console.log("[APK:popup] Translating, lang=", langSelect.value);
+      const lang = langSelect.value;
+      console.log("[APK:popup] Translating, lang=", lang);
       translateBtn.disabled = true;
       progressEl.textContent = "Translating...";
       progressEl.classList.remove("hidden");
+      setBadge("0%", "#FF9800");
+      setTitle(`AI Polyglot Kit — translating to ${lang}...`);
+
+      // Ensure content script is injected
+      const ready = await ensureContentScript(tab.id);
+      if (!ready) {
+        progressEl.textContent = "Error: cannot access this page";
+        translateBtn.disabled = false;
+        setBadge("!", "#F44336");
+        return;
+      }
 
       try {
         const result = await chrome.tabs.sendMessage(tab.id, {
           action: "startTranslation",
-          lang: langSelect.value,
+          lang,
         });
         console.log("[APK:popup] Content script response:", result);
+
+        if (result && result.ok && result.stats && result.stats.applied === 0 && result.stats.total === 0) {
+          // Content script returned OK but translated nothing — likely stale script
+          console.warn("[APK:popup] Zero translations applied, retrying with fresh injection...");
+          // Force re-inject content script
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => { window.__apkContentScriptLoaded = false; },
+            });
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ["content.js"],
+            });
+            await new Promise((r) => setTimeout(r, 200));
+            const retry = await chrome.tabs.sendMessage(tab.id, {
+              action: "startTranslation",
+              lang,
+            });
+            console.log("[APK:popup] Retry response:", retry);
+          } catch (retryErr) {
+            console.error("[APK:popup] Retry failed:", retryErr);
+          }
+        }
+
         isTranslated = true;
         setRevertMode();
         progressEl.textContent = "Done!";
+        setBadge(lang, "#4CAF50");
+        setTitle(`AI Polyglot Kit — translated to ${lang}`);
         setTimeout(() => progressEl.classList.add("hidden"), 2000);
       } catch (e) {
         progressEl.textContent = "Error: " + e.message;
         console.error("[APK:popup] Translation failed:", e);
+        setBadge("!", "#F44336");
       }
 
       translateBtn.disabled = false;
@@ -136,8 +218,10 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === "progress") {
-      progressEl.textContent = `Translating batch ${msg.done} of ${msg.total}...`;
+      const pct = Math.round((msg.done / msg.total) * 100);
+      progressEl.textContent = `Translating... ${pct}%`;
       progressEl.classList.remove("hidden");
+      setBadge(`${pct}%`, "#FF9800");
     }
   });
 

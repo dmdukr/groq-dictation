@@ -1,7 +1,7 @@
 /* background.js — Service Worker for AI Polyglot Kit extension */
 
 const API_BASE = "http://127.0.0.1:19378";
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 200;
 const MAX_PARALLEL = 3;
 
 /* ---------- Token management ---------- */

@@ -3,6 +3,13 @@
 (function () {
   "use strict";
 
+  // Prevent duplicate content scripts (after extension reload)
+  if (window.__apkContentScriptLoaded) {
+    console.log("[APK:cs] Already loaded, skipping duplicate");
+    return;
+  }
+  window.__apkContentScriptLoaded = true;
+
   const SKIP_TAGS = new Set([
     "SCRIPT", "STYLE", "CODE", "PRE", "NOSCRIPT",
     "SVG", "CANVAS", "TEXTAREA", "INPUT", "SELECT", "IFRAME",
@@ -150,6 +157,7 @@
       applied++;
     }
     console.log(`[APK:cs] Applied: ${applied}, skipped (same): ${skippedSame}, skipped (no parent): ${skippedNoParent}`);
+    return { applied, skippedSame, total: visibleNodes.length };
   }
 
   /* ---------- Scroll observer ---------- */
@@ -164,7 +172,7 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         translateVisibleNodes(lang);
-      }, 300);
+      }, 150);
     };
 
     window.addEventListener("scroll", scrollHandler, true);
@@ -209,13 +217,14 @@
       injectTooltipCSS();
       translatedState = true;
       translateVisibleNodes(msg.lang)
-        .then(() => {
-          console.log("[APK:cs] translateVisibleNodes completed OK");
+        .then((stats) => {
+          console.log("[APK:cs] translateVisibleNodes completed OK, stats:", stats);
           startScrollObserver(msg.lang);
-          sendResponse({ ok: true });
+          sendResponse({ ok: true, stats: stats || { applied: 0, total: 0 } });
         })
         .catch((err) => {
           console.error("[APK:cs] translateVisibleNodes FAILED:", err);
+          translatedState = false;
           sendResponse({ ok: false, error: err.message });
         });
       return true; // async

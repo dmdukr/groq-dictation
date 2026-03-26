@@ -12,6 +12,7 @@ import secrets
 import threading
 from functools import partial
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 from .config import APP_DIR, APP_VERSION
@@ -19,7 +20,11 @@ from .translate_engine import TranslateEngine
 
 logger = logging.getLogger(__name__)
 
-MAX_BATCH_SIZE = 50
+MAX_BATCH_SIZE = 200
+
+
+class _ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 
 class TranslateServer:
@@ -36,7 +41,7 @@ class TranslateServer:
     def start(self) -> None:
         """Start the HTTP server in a daemon thread."""
         handler = partial(_Handler, self)
-        self._server = HTTPServer(("127.0.0.1", self._port), handler)
+        self._server = _ThreadingHTTPServer(("127.0.0.1", self._port), handler)
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             name="TranslateServer",
