@@ -33,7 +33,7 @@ def get_morph() -> pymorphy3.MorphAnalyzer:
                 import pymorphy3 as _pymorphy3  # noqa: PLC0415
 
                 _morph = _pymorphy3.MorphAnalyzer(lang="uk")
-                logger.debug("pymorphy3 MorphAnalyzer initialized")
+                logger.info("[keywords] pymorphy3 MorphAnalyzer initialized (first use)")
     return _morph
 
 
@@ -328,6 +328,7 @@ def extract_keywords(text: str, max_keywords: int = 12) -> list[str]:
     if not text:
         return []
 
+    logger.debug("[keywords] extract_keywords: input text=%d chars", len(text))
     tokens: list[str] = _TOKEN_RE.findall(text.lower())
 
     # Step 2+3: filter and lemmatize
@@ -360,4 +361,10 @@ def extract_keywords(text: str, max_keywords: int = 12) -> list[str]:
 
     # Step 6: combine and cap
     combined = unigrams + bigrams
-    return combined[:max_keywords]
+    result = combined[:max_keywords]
+    logger.debug(
+        "[keywords] extract_keywords: tokens_after_filter=%d, final_keywords=%d",
+        len(filtered),
+        len(result),
+    )
+    return result

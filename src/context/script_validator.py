@@ -57,6 +57,7 @@ def deterministic_check(body: str) -> list[str]:
         if re.search(pattern, body, re.IGNORECASE)
     )
 
+    logger.debug("[script_validator] deterministic_check: violations=%d", len(violations))
     return violations
 
 
@@ -78,6 +79,7 @@ async def validate_script(
     """
     violations = deterministic_check(body)
     if violations:
+        logger.debug("[script_validator] validate_script: failed deterministic check, LLM not called")
         return (False, body, violations)
 
     if llm is not None:
@@ -93,10 +95,13 @@ async def validate_script(
             response_upper = response.strip().upper()
             if response_upper.startswith("NO"):
                 reason = response.strip()
+                logger.debug("[script_validator] validate_script: LLM rejected script")
                 return (False, body, [f"LLM: {reason}"])
+            logger.debug("[script_validator] validate_script: LLM approved script")
         except Exception:
-            logger.warning("LLM validation failed, accepting script on deterministic check only")
+            logger.warning("[script_validator] validate_script: LLM call failed, accepting on deterministic only")
 
+    logger.debug("[script_validator] validate_script: passed")
     return (True, body, [])
 
 

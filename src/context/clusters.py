@@ -52,11 +52,18 @@ def detect_cluster(db: sqlite3.Connection, keywords: list[str]) -> int | None:
     params = [*keywords, *keywords]
     row = db.execute(query, params).fetchone()
     if row is None:
+        logger.debug("[clusters] detect_cluster: no co-occurrence data for keywords=%s", keywords)
         return None
 
     cluster_id: int = row[0]
     score: float = row[1]
-    logger.debug("detect_cluster(%s) -> cluster=%d score=%.2f", keywords, cluster_id, score)
+    logger.debug(
+        "[clusters] detect_cluster: top_cluster=%d, score=%.2f, threshold=%.1f, accepted=%s",
+        cluster_id,
+        score,
+        CLUSTER_SCORE_THRESHOLD,
+        score >= CLUSTER_SCORE_THRESHOLD,
+    )
 
     if score >= CLUSTER_SCORE_THRESHOLD:
         return cluster_id
@@ -99,7 +106,7 @@ def name_cluster(db: sqlite3.Connection, cluster_id: int) -> str:
         [display_name, cluster_id],
     )
     db.commit()
-    logger.debug("name_cluster(%d) -> %s", cluster_id, display_name)
+    logger.debug("[clusters] name_cluster: cluster_id=%d, display_name=%s", cluster_id, display_name)
     return display_name
 
 
@@ -112,13 +119,13 @@ def get_or_create_cluster(db: sqlite3.Connection, keywords: list[str]) -> int:
     """
     existing = detect_cluster(db, keywords)
     if existing is not None:
-        logger.debug("get_or_create_cluster: reusing cluster %d", existing)
+        logger.debug("[clusters] get_or_create_cluster: found existing cluster=%d", existing)
         return existing
 
     cursor = db.execute("INSERT INTO clusters (display_name) VALUES (NULL)")
     db.commit()
     new_id: int = cursor.lastrowid  # type: ignore[assignment]
-    logger.debug("get_or_create_cluster: created cluster %d", new_id)
+    logger.info("[clusters] get_or_create_cluster: created new cluster=%d", new_id)
 
     name_cluster(db, new_id)
     return new_id

@@ -120,11 +120,20 @@ class DictationPipeline:
         if not raw_text.strip():
             return PipelineResult(raw_text=raw_text, normalized_text=raw_text)
 
+        logger.debug("[pipeline] process: starting, text=%d chars, app=%s", len(raw_text), app)
+
         # Stage 3: Replacements (placeholder)
         replaced_text = raw_text
 
         # Stage 4: Context Engine
         ctx: ContextResult = self._context_engine.resolve(replaced_text, app)
+        logger.debug(
+            "[pipeline] process: stage4 context — thread=%s, cluster=%s, keywords=%d, resolved=%d",
+            ctx.thread_id,
+            ctx.cluster_id,
+            len(ctx.keywords),
+            len(ctx.resolved_terms),
+        )
 
         # Stage 5: LLM normalization
         normalized_text = replaced_text
@@ -142,6 +151,9 @@ class DictationPipeline:
             )
             normalized_text = self._llm.normalize(llm_prompt, replaced_text)
             llm_called = True
+            logger.debug("[pipeline] process: stage5 LLM called, prompt=%d chars", len(llm_prompt))
+        else:
+            logger.debug("[pipeline] process: stage5 LLM skipped (enable_llm=%s)", self._config.enable_llm)
 
         # Stage 6: Local post-processing
         exact_terms = get_exact_terms(self._db)
@@ -151,6 +163,7 @@ class DictationPipeline:
                 exact_terms,
                 ctx.resolved_terms,
             )
+            logger.debug("[pipeline] process: stage6 post-processing applied, exact_terms=%d", len(exact_terms))
 
         # Stage 7: Save history
         self._save_history(
@@ -160,6 +173,12 @@ class DictationPipeline:
             window_title=window_title,
             thread_id=ctx.thread_id,
             cluster_id=ctx.cluster_id,
+        )
+
+        logger.debug(
+            "[pipeline] process: complete, llm_called=%s, output=%d chars",
+            llm_called,
+            len(normalized_text),
         )
 
         return PipelineResult(
@@ -183,7 +202,7 @@ class DictationPipeline:
         cluster_id: int | None,
     ) -> bool:
         """Process user correction feedback."""
-        return learn_from_correction(
+        result = learn_from_correction(
             self._db,
             raw,
             normalized,
@@ -193,6 +212,8 @@ class DictationPipeline:
             cluster_id,
             encrypt_fn=mock_encrypt,
         )
+        logger.debug("[pipeline] process_correction: accepted=%s, thread=%s, cluster=%s", result, thread_id, cluster_id)
+        return result
 
     def _get_app_script(self, app: str) -> str | None:
         """Look up custom script for this app."""

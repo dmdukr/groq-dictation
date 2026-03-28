@@ -102,6 +102,14 @@ class ContextEngine:
 
         cluster_id = detect_cluster(self._db, keywords)
 
+        logger.debug(
+            "[engine] resolve: text=%d chars, keywords=%d, thread=%s, cluster=%s",
+            len(text),
+            len(keywords),
+            thread_id,
+            cluster_id,
+        )
+
         result = ContextResult(
             thread_id=thread_id,
             cluster_id=cluster_id,
@@ -128,6 +136,12 @@ class ContextEngine:
             if should_update:
                 update_cooccurrence(self._db, keywords, cluster_id)
 
+        logger.debug(
+            "[engine] resolve: resolved=%d, unresolved=%d, ambiguous=%d",
+            len(result.resolved_terms),
+            len(result.unresolved_terms),
+            len(result.resolutions),
+        )
         return result
 
     def _resolve_term(
@@ -141,20 +155,24 @@ class ContextEngine:
         # Level 1: Self-context (co-occurrence within this dictation)
         res = self._level1_self_context(term, keywords, cluster_id)
         if res and res.confidence >= CONFIDENCE_THRESHOLDS[1]:
+            logger.debug("[engine] _resolve_term(%s): accepted at level=1, confidence=%.2f", term, res.confidence)
             return res
 
         # Level 2: Active thread
         if thread is not None:
             res = self._level2_active_thread(term, thread)
             if res and res.confidence >= CONFIDENCE_THRESHOLDS[2]:
+                logger.debug("[engine] _resolve_term(%s): accepted at level=2, confidence=%.2f", term, res.confidence)
                 return res
 
         # Level 3: Fingerprint
         res = self._level3_fingerprint(term, keywords)
         if res and res.confidence >= CONFIDENCE_THRESHOLDS[3]:
+            logger.debug("[engine] _resolve_term(%s): accepted at level=3, confidence=%.2f", term, res.confidence)
             return res
 
         # Level 4: Unresolved — defer to LLM
+        logger.debug("[engine] _resolve_term(%s): unresolved, deferring to LLM", term)
         return None
 
     def _level1_self_context(
@@ -178,6 +196,13 @@ class ContextEngine:
         weight: float = float(best["effective_weight"])
         confidence = min(weight / 5.0, 1.0)
         cid: int = best["cluster_id"]
+        logger.debug(
+            "[engine] _level1_self_context(%s): best_weight=%.2f, confidence=%.2f, cluster=%d",
+            term,
+            weight,
+            confidence,
+            cid,
+        )
         # Get cluster display_name as "meaning"
         cluster_row = self._db.execute("SELECT display_name FROM clusters WHERE id = ?", [cid]).fetchone()
         meaning: str | None = cluster_row["display_name"] if cluster_row else None
@@ -201,7 +226,14 @@ class ContextEngine:
         cid: int | None = thread["cluster_id"]
         if cid is None:
             return None
-        confidence = min(float(thread["message_count"]) / 3.0, 1.0)
+        msg_count: int = thread["message_count"]
+        confidence = min(float(msg_count) / 3.0, 1.0)
+        logger.debug(
+            "[engine] _level2_active_thread(%s): message_count=%d, confidence=%.2f",
+            term,
+            msg_count,
+            confidence,
+        )
         cluster_row = self._db.execute("SELECT display_name FROM clusters WHERE id = ?", [cid]).fetchone()
         meaning: str | None = cluster_row["display_name"] if cluster_row else None
         return TermResolution(
@@ -241,6 +273,15 @@ class ContextEngine:
         best = rows[0]
         confidence = float(best["hits"]) / float(total)
         cid = best["cluster_id"]
+        logger.debug(
+            "[engine] _level3_fingerprint(%s): clusters=%d, winner_cluster=%s, hits=%d/%d, confidence=%.2f",
+            term,
+            len(rows),
+            cid,
+            best["hits"],
+            total,
+            confidence,
+        )
         cluster_row = self._db.execute("SELECT display_name FROM clusters WHERE id = ?", [cid]).fetchone()
         meaning: str | None = cluster_row["display_name"] if cluster_row else None
         return TermResolution(

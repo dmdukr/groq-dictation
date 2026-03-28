@@ -44,7 +44,14 @@ def add_term(
     )
     db.commit()
     row_id: int = cursor.lastrowid  # type: ignore[assignment]
-    logger.debug("add_term: %s -> %s (type=%s, id=%d)", source, target, term_type, row_id)
+    logger.debug(
+        "[dictionary] add_term: %s -> %s (type=%s, origin=%s, id=%d)",
+        source,
+        target,
+        term_type,
+        origin,
+        row_id,
+    )
     return row_id
 
 
@@ -52,7 +59,7 @@ def remove_term(db: sqlite3.Connection, term_id: int) -> None:
     """Remove dictionary term by id."""
     db.execute("DELETE FROM dictionary WHERE id = ?", [term_id])
     db.commit()
-    logger.debug("remove_term: id=%d", term_id)
+    logger.debug("[dictionary] remove_term: id=%d", term_id)
 
 
 def apply_exact_replacements(
@@ -68,12 +75,26 @@ def apply_exact_replacements(
     - Returns modified text
     """
     result = text
+    checked = 0
+    replaced = 0
+    skipped = 0
     for source, target in exact_terms.items():
+        checked += 1
         if source in resolved_terms:
+            skipped += 1
             continue
         # Word-boundary matching, case-insensitive
         pattern = re.compile(r"\b" + re.escape(source) + r"\b", re.IGNORECASE)
-        result = pattern.sub(target, result)
+        new_result = pattern.sub(target, result)
+        if new_result != result:
+            replaced += 1
+        result = new_result
+    logger.debug(
+        "[dictionary] apply_exact_replacements: checked=%d, replaced=%d, skipped=%d",
+        checked,
+        replaced,
+        skipped,
+    )
     return result
 
 

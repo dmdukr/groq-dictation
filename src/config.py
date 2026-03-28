@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "5.0.6"
+APP_VERSION = "6.0.0"
 APP_NAME = "AIPolyglotKit"
 GITHUB_REPO = "dmdukr/ai-polyglot-kit"
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -89,6 +89,7 @@ class LoggingConfig:
     file: str = "groq-dictation.log"
     max_size_mb: int = 5
     backup_count: int = 3
+    dev_logging: bool = False  # Enable DEBUG for src.context.* modules
 
 
 @dataclass
@@ -285,3 +286,15 @@ def setup_logging(config: LoggingConfig) -> None:
         "%(asctime)s %(levelname)s %(name)s: %(message)s"
     ))
     root.addHandler(console)
+
+    # Dev logging: enable DEBUG for context engine modules
+    if config.dev_logging:
+        for mod in [
+            "src.context.engine", "src.context.keywords", "src.context.cooccurrence",
+            "src.context.clusters", "src.context.threads", "src.context.dictionary",
+            "src.context.corrections", "src.context.pipeline", "src.context.prompt_builder",
+            "src.context.script_validator", "src.context.maintenance", "src.context.db",
+        ]:
+            logging.getLogger(mod).setLevel(logging.DEBUG)
+        logging.getLogger("src.context").setLevel(logging.DEBUG)
+        logger.info("Dev logging enabled for src.context.* (DEBUG level)")

@@ -50,3 +50,4 @@ logging:
   file: groq-dictation.log
   max_size_mb: 5
   backup_count: 3
+  dev_logging: true

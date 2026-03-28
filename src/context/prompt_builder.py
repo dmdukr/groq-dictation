@@ -52,7 +52,14 @@ def build_llm_prompt(
 
     Returns assembled prompt string.
     """
-    logger.debug("Building prompt for app=%s, text_len=%d", app_name, len(raw_text))
+    active_toggles = [k for k, v in toggles.items() if v]
+    logger.debug(
+        "[prompt_builder] build_llm_prompt: app=%s, text_len=%d, toggles=%s, script=%s",
+        app_name,
+        len(raw_text),
+        active_toggles,
+        app_script is not None,
+    )
     parts: list[str] = [BASE_PROMPT]
 
     for toggle_name, instruction in TOGGLE_INSTRUCTIONS.items():
@@ -74,7 +81,9 @@ def build_llm_prompt(
     if unresolved_terms and toggles.get("terminology", False):
         parts.append(format_term_candidates(unresolved_terms))
 
-    return "\n\n".join(parts)
+    prompt = "\n\n".join(parts)
+    logger.debug("[prompt_builder] build_llm_prompt: token_estimate=%d", estimate_tokens(prompt))
+    return prompt
 
 
 def format_term_candidates(terms: list[dict[str, object]]) -> str:

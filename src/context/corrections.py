@@ -119,7 +119,15 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
         [old_token, new_token],
     ).fetchone()
 
+    current_count = row["count"] if row is not None else 0
     if row is None or row["count"] < AUTO_PROMOTE_THRESHOLD:
+        logger.debug(
+            "[corrections] auto_promote_check: %s -> %s, count=%d, threshold=%d — not promoted",
+            old_token,
+            new_token,
+            current_count,
+            AUTO_PROMOTE_THRESHOLD,
+        )
         return False
 
     # Check if already in dictionary
@@ -129,6 +137,11 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
     ).fetchone()
 
     if existing is not None:
+        logger.debug(
+            "[corrections] auto_promote_check: %s -> %s already in dictionary, skipping",
+            old_token,
+            new_token,
+        )
         return False
 
     db.execute(
@@ -137,7 +150,13 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
         [old_token, new_token],
     )
     db.commit()
-    logger.info("Auto-promoted correction: %s -> %s", old_token, new_token)
+    logger.info(
+        "[corrections] auto_promote_check: promoted %s -> %s (count=%d >= threshold=%d)",
+        old_token,
+        new_token,
+        current_count,
+        AUTO_PROMOTE_THRESHOLD,
+    )
     return True
 
 
@@ -157,18 +176,37 @@ def get_llm_confidence(db: sqlite3.Connection, cluster_id: int | None) -> float:
     ).fetchone()
 
     if row is None:
+        logger.debug("[corrections] get_llm_confidence: cluster=%d, no stats, returning 1.0", cluster_id)
         return 1.0
 
     total: int = row["total_llm_resolutions"]
     errors: int = row["llm_errors"]
 
     if total < MIN_LLM_SAMPLES:
+        logger.debug(
+            "[corrections] get_llm_confidence: cluster=%d, samples=%d < %d, returning 1.0",
+            cluster_id,
+            total,
+            MIN_LLM_SAMPLES,
+        )
         return 1.0
 
     error_rate = errors / total
     if error_rate > HIGH_ERROR_RATE:
+        logger.debug(
+            "[corrections] get_llm_confidence: cluster=%d, error_rate=%.2f > %.2f, returning %.1f",
+            cluster_id,
+            error_rate,
+            HIGH_ERROR_RATE,
+            DEGRADED_CONFIDENCE,
+        )
         return DEGRADED_CONFIDENCE
 
+    logger.debug(
+        "[corrections] get_llm_confidence: cluster=%d, error_rate=%.2f, returning 1.0",
+        cluster_id,
+        error_rate,
+    )
     return 1.0
 
 
@@ -209,6 +247,7 @@ def learn_from_correction(
     5. Return True if stored
     """
     if not rate_limit_correction():
+        logger.warning("[corrections] learn_from_correction: rate-limited, rejecting correction")
         return False
 
     # Store encrypted correction triad
@@ -253,5 +292,5 @@ def learn_from_correction(
         auto_promote_check(db, old_tok, new_tok)
 
     db.commit()
-    logger.debug("Learned correction: %d diffs processed", len(diffs))
+    logger.debug("[corrections] learn_from_correction: accepted, diffs=%d", len(diffs))
     return True

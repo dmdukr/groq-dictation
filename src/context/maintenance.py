@@ -59,6 +59,7 @@ def daily_maintenance(
     """
     cfg = config or MaintenanceConfig()
     report = MaintenanceReport()
+    logger.info("[maintenance] daily_maintenance: starting")
 
     # 1. Prune co-occurrence
     try:
@@ -119,6 +120,17 @@ def daily_maintenance(
             report.backup_created = True
         except Exception as e:
             report.errors.append(f"backup: {e}")
+
+    logger.info(
+        "[maintenance] daily_maintenance: done — cooccurrence_pruned=%d, history_pruned=%d, "
+        "threads_pruned=%d, fingerprints_pruned=%d, backup=%s, errors=%d",
+        report.cooccurrence_pruned,
+        report.history_pruned,
+        report.threads_pruned,
+        report.fingerprints_pruned,
+        report.backup_created,
+        len(report.errors),
+    )
     return report
 
 

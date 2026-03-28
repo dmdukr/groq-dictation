@@ -56,6 +56,12 @@ def update_cooccurrence(db: sqlite3.Connection, keywords: list[str], cluster_id:
         canonical = sorted([a, b])
         pairs.append((canonical[0], canonical[1]))
 
+    logger.debug(
+        "[cooccurrence] update_cooccurrence: pairs=%d, cluster_id=%d",
+        len(pairs),
+        cluster_id,
+    )
+
     with db:
         db.executemany(
             """INSERT INTO term_cooccurrence (term_a, term_b, cluster_id, weight, last_used)
@@ -97,7 +103,14 @@ def query_cooccurrence(db: sqlite3.Connection, term: str, context_terms: list[st
     )
 
     params: list[str] = [term, *ctx_params, term, *ctx_params]
-    return db.execute(sql, params).fetchall()
+    rows = db.execute(sql, params).fetchall()
+    logger.debug(
+        "[cooccurrence] query_cooccurrence: term=%s, context_terms=%d, results=%d",
+        term,
+        len(context_terms),
+        len(rows),
+    )
+    return rows
 
 
 def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> tuple[bool, int | None]:
@@ -126,6 +139,7 @@ def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> t
     rows = db.execute(sql, params).fetchall()
 
     if not rows:
+        logger.debug("[cooccurrence] should_update_cooccurrence: no data, allowing update")
         return True, None
 
     best_cluster_id: int = rows[0]["cluster_id"]
@@ -134,8 +148,20 @@ def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> t
     if len(rows) >= _MIN_CLUSTER_COUNT:
         second_score: int = rows[1]["total_weight"]
         if second_score > _MIXED_TOPIC_THRESHOLD * best_score:
+            logger.warning(
+                "[cooccurrence] should_update_cooccurrence: mixed topic detected, "
+                "best_cluster=%d score=%d, second_score=%d — blocking update",
+                best_cluster_id,
+                best_score,
+                second_score,
+            )
             return False, best_cluster_id
 
+    logger.debug(
+        "[cooccurrence] should_update_cooccurrence: allowed, best_cluster=%d, score=%d",
+        best_cluster_id,
+        best_score,
+    )
     return True, best_cluster_id
 
 
@@ -152,7 +178,7 @@ def prune_cooccurrence(db: sqlite3.Connection, *, max_age_days: int = 90) -> int
             [max_age_days],
         )
     deleted: int = cursor.rowcount
-    logger.info("Pruned %d weak co-occurrence edges older than %d days", deleted, max_age_days)
+    logger.info("[cooccurrence] prune_cooccurrence: deleted=%d edges older than %d days", deleted, max_age_days)
     return deleted
 
 
@@ -169,6 +195,12 @@ def emergency_prune(db: sqlite3.Connection, *, max_edges: int = 200_000, min_wei
     if count <= max_edges:
         return 0
 
+    logger.warning(
+        "[cooccurrence] emergency_prune triggered: %d edges exceeds max=%d",
+        count,
+        max_edges,
+    )
+
     with db:
         cursor = db.execute(
             "DELETE FROM term_cooccurrence WHERE weight < ?",
@@ -176,7 +208,7 @@ def emergency_prune(db: sqlite3.Connection, *, max_edges: int = 200_000, min_wei
         )
     deleted: int = cursor.rowcount
     logger.info(
-        "Emergency prune: deleted %d edges with weight < %d (was %d rows)",
+        "[cooccurrence] emergency_prune: deleted %d edges with weight < %d (was %d rows)",
         deleted,
         min_weight,
         count,
