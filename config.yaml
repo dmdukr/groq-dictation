@@ -46,8 +46,8 @@ ui:
   sound_on_stop: true
   language: uk
 logging:
-  level: INFO
+  level: INFO             # Global: DEBUG, INFO, WARNING, ERROR
   file: groq-dictation.log
   max_size_mb: 5
   backup_count: 3
-  dev_logging: true
+  dev_logging: true       # Enable DEBUG for Context Engine modules (src.context.*)

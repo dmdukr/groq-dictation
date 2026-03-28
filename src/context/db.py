@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS history (
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     raw_text_enc BLOB,
     normalized_text_enc BLOB,
+    llm_prompt_enc BLOB,
     app TEXT NOT NULL,
     window_title TEXT,
     thread_id INTEGER REFERENCES conversation_threads(id),
@@ -69,7 +70,9 @@ CREATE TABLE IF NOT EXISTS history (
     llm_provider TEXT,
     tokens_stt INTEGER DEFAULT 0,
     tokens_llm INTEGER DEFAULT 0,
-    confidence REAL
+    confidence REAL,
+    was_corrected BOOLEAN DEFAULT 0,
+    correction_id INTEGER REFERENCES corrections(id)
 );
 
 CREATE TABLE IF NOT EXISTS conversation_threads (
@@ -126,9 +129,11 @@ CREATE TABLE IF NOT EXISTS dictionary (
 
 CREATE TABLE IF NOT EXISTS corrections (
     id INTEGER PRIMARY KEY,
+    history_id INTEGER REFERENCES history(id),
     raw_text_enc BLOB NOT NULL,
     normalized_text_enc BLOB NOT NULL,
     corrected_text_enc BLOB NOT NULL,
+    llm_prompt_enc BLOB,
     error_source TEXT,
     app TEXT,
     thread_id INTEGER REFERENCES conversation_threads(id),

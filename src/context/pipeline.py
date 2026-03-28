@@ -169,6 +169,7 @@ class DictationPipeline:
         self._save_history(
             raw_text=raw_text,
             normalized_text=normalized_text,
+            llm_prompt=llm_prompt,
             app=app,
             window_title=window_title,
             thread_id=ctx.thread_id,
@@ -233,15 +234,18 @@ class DictationPipeline:
         window_title: str,
         thread_id: int | None,
         cluster_id: int | None,
-    ) -> None:
-        """Save dictation to history table."""
-        self._db.execute(
+        llm_prompt: str | None = None,
+    ) -> int:
+        """Save dictation to history table. Returns history_id."""
+        cursor = self._db.execute(
             """INSERT INTO history
-               (raw_text_enc, normalized_text_enc, app, window_title, thread_id, cluster_id, word_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (raw_text_enc, normalized_text_enc, llm_prompt_enc,
+                app, window_title, thread_id, cluster_id, word_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 mock_encrypt(raw_text),
                 mock_encrypt(normalized_text),
+                mock_encrypt(llm_prompt) if llm_prompt else None,
                 app,
                 window_title,
                 thread_id,
@@ -250,3 +254,5 @@ class DictationPipeline:
             ],
         )
         self._db.commit()
+        history_id: int = cursor.lastrowid  # type: ignore[assignment]
+        return history_id
