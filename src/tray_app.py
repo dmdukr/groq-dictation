@@ -454,18 +454,19 @@ class TrayApp:
 
     def _on_settings_click(self, _icon=None, _item=None) -> None:
         """Open GUI settings window (PyWebView preferred, tkinter fallback)."""
-        logger.info("Opening settings window")
+        logger.info("Settings click: opening settings window")
         try:
             from .ui.settings_window import show_settings
 
+            logger.info("Settings click: using PyWebView")
             show_settings(
                 self._config,
                 self._engine._audio_capture,
                 self._on_settings_saved,
             )
+            logger.info("Settings click: show_settings() returned (queued)")
         except ImportError:
-            # Fallback to tkinter settings if pywebview not available
-            logger.info("pywebview not available, falling back to tkinter settings")
+            logger.info("Settings click: pywebview not available, using tkinter")
             from .settings_ui import SettingsWindow
 
             settings = SettingsWindow(
@@ -474,6 +475,8 @@ class TrayApp:
                 on_save=self._on_settings_saved,
             )
             settings.show()
+        except Exception:
+            logger.exception("Settings click: FAILED")
 
     def _on_settings_saved(self, restart: bool = False) -> None:
         """Re-register hotkeys and update mic after settings change."""

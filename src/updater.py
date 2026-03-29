@@ -95,12 +95,9 @@ class Updater:
                         "Downloaded %d bytes to %s", downloaded, installer_path
                     )
 
-            # Launch installer (handles killing old process, replacing files, restart)
+            # Launch installer in foreground (visible to user)
             logger.info("Launching installer: %s", installer_path)
-            subprocess.Popen(
-                [str(installer_path)],
-                creationflags=subprocess.DETACHED_PROCESS,
-            )
+            os.startfile(str(installer_path))
 
             logger.info("Exiting for update...")
             os._exit(0)
