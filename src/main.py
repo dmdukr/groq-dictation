@@ -3,13 +3,13 @@
 Entry point: bootstraps config, engine, and tray app.
 """
 
-import sys
-import logging
 import faulthandler
+import logging
+import sys
 import tempfile
 from pathlib import Path
 
-from .config import AppConfig, APP_DIR, setup_logging
+from .config import APP_DIR, AppConfig, setup_logging
 from .engine import DictationEngine
 from .tray_app import TrayApp
 
@@ -124,12 +124,26 @@ def main() -> None:
     # Telemetry: app start
     engine._telemetry.app_start()
 
-    # Create and run tray app (blocks main thread)
+    # Create tray app
     tray = TrayApp(engine, config)
 
-    logger.info("Starting tray application")
+    # Run tray in a daemon thread (frees main thread for PyWebView)
+    logger.info("Starting tray application (threaded)")
+    tray_thread = threading.Thread(target=tray.run, name="TrayApp", daemon=True)
+    tray_thread.start()
+
+    # Main thread: wait for Settings window requests (PyWebView needs main thread)
     try:
-        tray.run()
+        from .ui.settings_window import run_settings_loop, shutdown_settings_loop
+        logger.info("Main thread ready for PyWebView settings requests")
+        run_settings_loop()  # blocks until shutdown signal
+    except ImportError:
+        logger.info("PyWebView not available, main thread idle")
+        # Keep main thread alive while tray runs
+        try:
+            tray_thread.join()
+        except KeyboardInterrupt:
+            pass
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
     except Exception as e:

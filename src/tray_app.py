@@ -682,5 +682,11 @@ class TrayApp:
         keyboard.unhook_all()
         if self._icon:
             self._icon.stop()
+        # Signal settings loop to exit
+        try:
+            from .ui.settings_window import shutdown_settings_loop
+            shutdown_settings_loop()
+        except ImportError:
+            pass
         # Force exit to ensure all threads are killed
         os._exit(0)

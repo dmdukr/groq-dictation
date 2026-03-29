@@ -1,20 +1,15 @@
-"""Settings window launcher.
+"""Settings window launcher using PyWebView.
 
-Strategy:
-1. If running from source (not frozen) and pywebview available:
-   launch _settings_main.py as subprocess with system Python
-2. If frozen (PyInstaller) or pywebview unavailable:
-   serve web UI on localhost and open in default browser
+Architecture: main thread is kept free for PyWebView windows.
+Tray app signals this module when Settings should open.
+The main thread event loop in main.py picks up the signal.
 """
 
 from __future__ import annotations
 
 import logging
-import subprocess
-import sys
+import queue
 import threading
-import webbrowser
-from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,95 +21,93 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_settings_proc: subprocess.Popen[bytes] | None = None
-_http_server: HTTPServer | None = None
-_HTTP_PORT = 19379
+# Signal queue: main thread waits on this for "open settings" commands
+_settings_queue: queue.Queue[AppConfig | None] = queue.Queue()
+_window_open = threading.Event()
 
 
 def show_settings(
-    config: AppConfig,  # noqa: ARG001
+    config: AppConfig,
     audio_capture: AudioCapture | None = None,  # noqa: ARG001
     on_save: Callable[..., None] | None = None,  # noqa: ARG001
 ) -> None:
-    """Open the Settings UI."""
-    # Try PyWebView subprocess first (only works from source with python.exe)
-    if not getattr(sys, "frozen", False):
-        try:
-            _show_pywebview()
-        except Exception:
-            logger.info("PyWebView launch failed, falling back to browser")
-        else:
-            return
+    """Request the main thread to open Settings window.
 
-    # Fallback: serve via HTTP + open browser
-    _show_in_browser()
-
-
-def _show_pywebview() -> None:
-    """Launch _settings_main.py as subprocess (works from source only)."""
-    global _settings_proc  # noqa: PLW0603
-
-    if _settings_proc is not None and _settings_proc.poll() is None:
+    Called from tray menu callback (runs in pystray thread).
+    Puts config on the queue; main thread picks it up.
+    """
+    if _window_open.is_set():
         logger.info("Settings window already open")
         return
 
-    config_path = str(Path("config.yaml").resolve())
-    launcher = str(Path(__file__).parent / "_settings_main.py")
-
-    _settings_proc = subprocess.Popen(  # noqa: S603
-        [sys.executable, launcher, config_path],
-        cwd=str(Path(__file__).parent.parent.parent),
-    )
-    logger.info("Settings PyWebView launched (PID %s)", _settings_proc.pid)
+    logger.info("Requesting Settings window open")
+    _settings_queue.put(config)
 
 
-def _show_in_browser() -> None:
-    """Serve web UI on localhost and open in default browser."""
-    global _http_server  # noqa: PLW0603
+def run_settings_loop() -> None:
+    """Main-thread event loop that opens PyWebView windows on demand.
+
+    Called from main.py after tray.run() starts in a thread.
+    Blocks the main thread, waiting for settings open requests.
+    """
+    while True:
+        config = _settings_queue.get()  # blocks until signal
+        if config is None:
+            break  # shutdown signal
+
+        _window_open.set()
+        try:
+            _open_webview_window(config)
+        except Exception:
+            logger.exception("Settings window error")
+        finally:
+            _window_open.clear()
+
+
+def shutdown_settings_loop() -> None:
+    """Signal the main-thread loop to exit."""
+    _settings_queue.put(None)
+
+
+def _open_webview_window(config: AppConfig) -> None:
+    """Create and show a PyWebView window. Runs on main thread."""
+    import webview  # noqa: PLC0415
+
+    from src.ui.web_bridge import SettingsBridge  # noqa: PLC0415
+
+    bridge = SettingsBridge(config, None, None)
 
     web_dir = _find_web_dir()
     if web_dir is None:
         logger.error("Cannot find web UI directory")
         return
 
-    # Start HTTP server if not running
-    if _http_server is None:
-        handler = _make_handler(web_dir)
-        try:
-            _http_server = HTTPServer(("127.0.0.1", _HTTP_PORT), handler)
-        except OSError:
-            logger.info("HTTP server already running on port %d", _HTTP_PORT)
-            webbrowser.open(f"http://127.0.0.1:{_HTTP_PORT}/index.html")
-            return
+    window = webview.create_window(
+        "AI Polyglot Kit \u2014 Settings",
+        url=str(web_dir / "index.html"),
+        js_api=bridge,
+        width=900,
+        height=640,
+        resizable=True,
+        min_size=(700, 500),
+        background_color="#1e1e2e",
+    )
+    bridge.set_window(window)
 
-        t = threading.Thread(target=_http_server.serve_forever, name="SettingsHTTP", daemon=True)
-        t.start()
-        logger.info("Settings HTTP server started on port %d", _HTTP_PORT)
-
-    webbrowser.open(f"http://127.0.0.1:{_HTTP_PORT}/index.html")
+    logger.info("PyWebView Settings window created")
+    webview.start(debug=False)
+    logger.info("PyWebView Settings window closed")
 
 
 def _find_web_dir() -> Path | None:
-    """Find the web UI directory in various locations."""
+    """Find the web UI directory."""
+    import sys  # noqa: PLC0415
+
     candidates = [
         Path(__file__).parent / "web",
-        Path(getattr(sys, "_MEIPASS", "")) / "src" / "ui" / "web" if getattr(sys, "frozen", False) else None,
+        Path(getattr(sys, "_MEIPASS", "")) / "src" / "ui" / "web",
     ]
     for c in candidates:
-        if c is not None and c.is_dir() and (c / "index.html").exists():
+        if c.is_dir() and (c / "index.html").exists():
             return c
     return None
-
-
-def _make_handler(web_dir: Path) -> type[SimpleHTTPRequestHandler]:
-    """Create a handler class that serves from web_dir."""
-    directory = str(web_dir)
-
-    class Handler(SimpleHTTPRequestHandler):
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            super().__init__(*args, directory=directory, **kwargs)  # type: ignore[arg-type]
-
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-            pass  # Suppress HTTP logs
-
-    return Handler
