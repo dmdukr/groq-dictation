@@ -573,13 +573,16 @@ class TrayApp:
                 daemon=True,
             ).start()
         else:
-            # Manual check
-            def _check():
+            # Manual check — if update found, install immediately
+            def _check_and_install():
                 result = self._updater.check_now()
-                if not result and self._icon:
+                if result and result.get("url"):
+                    logger.info(f"Manual check found update: v{result['version']}")
+                    self._updater.download_and_install(result["url"], result.get("filename", ""))
+                elif self._icon:
                     self._icon.notify("No updates available", "AI Polyglot Kit")
 
-            threading.Thread(target=_check, daemon=True).start()
+            threading.Thread(target=_check_and_install, daemon=True).start()
 
     def _on_restart_click(self, _icon=None, _item=None) -> None:
         """Restart the application (re-exec the process)."""
