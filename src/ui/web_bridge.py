@@ -868,7 +868,7 @@ class WebBridge:
         """Load theme preference from ``translate_settings.json``."""
         from src.utils import load_translate_settings  # noqa: PLC0415
 
-        return load_translate_settings().get("theme", "auto")
+        return load_translate_settings().get("theme", "dark")
 
     @staticmethod
     def _save_theme(theme: str) -> None:

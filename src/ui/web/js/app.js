@@ -176,6 +176,9 @@
     dynamicStyle = document.createElement('style');
     document.head.appendChild(dynamicStyle);
 
+    // Apply dark theme immediately (default)
+    setTheme('dark');
+
     var themeSelect = document.getElementById('theme-select');
     if (themeSelect) {
       themeSelect.addEventListener('change', function () {
@@ -189,6 +192,8 @@
    * @param {string} theme - 'dark' or 'light'
    */
   function setTheme(theme) {
+    // Normalize: 'auto' or unknown → 'dark'
+    if (theme !== 'dark' && theme !== 'light') theme = 'dark';
     currentTheme = theme;
     document.documentElement.setAttribute('data-theme', theme);
     document.body.style.background = theme === 'light' ? '#ddd8ce' : '#16161e';
@@ -427,10 +432,10 @@
    */
   function populateForm(config) {
     // -- General --
-    if (config.theme) {
-      setTheme(config.theme);
-      setSelectValue('theme-select', config.theme);
-    }
+    var theme = config.theme || 'dark';
+    if (theme !== 'dark' && theme !== 'light') theme = 'dark';
+    setTheme(theme);
+    setSelectValue('theme-select', theme);
     if (config.language) {
       setSelectValue('lang-select', config.language);
       setLang(config.language);
@@ -2570,14 +2575,27 @@
       var info = await api.get_version();
       if (!info) return;
 
-      var versionEl = document.getElementById('version-text');
-      if (versionEl) versionEl.textContent = 'v' + (info.version || '');
+      var ver = 'v' + (info.version || '');
 
-      if (info.update_available) {
-        var badge = document.getElementById('update-badge');
-        if (badge) {
-          badge.textContent = 'v' + info.latest + ' available';
+      var versionEl = document.getElementById('version-text');
+      if (versionEl) versionEl.textContent = 'Version ' + ver;
+
+      var footerEl = document.getElementById('footer-version');
+      if (footerEl) footerEl.textContent = ver;
+
+      // Update badge
+      var badge = document.getElementById('footer-update-badge');
+      if (badge) {
+        if (info.update_available && info.latest) {
           badge.style.display = '';
+          var badgeText = badge.querySelector('.btn-text');
+          if (badgeText) badgeText.textContent = 'v' + info.latest + ' available';
+          badge.onclick = function(e) {
+            e.preventDefault();
+            if (api && api.check_update) api.check_update();
+          };
+        } else {
+          badge.style.display = 'none';
         }
       }
     } catch (e) {

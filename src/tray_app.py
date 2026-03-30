@@ -278,14 +278,6 @@ class TrayApp:
                 t("tray.settings"),
                 self._on_settings_click,
             ),
-            MenuItem(
-                t("tray.open_logs"),
-                self._on_log_click,
-            ),
-            MenuItem(
-                t("tray.open_profile"),
-                self._on_profile_click,
-            ),
             Menu.SEPARATOR,
             MenuItem(
                 lambda text: (
