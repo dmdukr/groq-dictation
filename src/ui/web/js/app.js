@@ -431,7 +431,7 @@
     try {
       var config = await api.get_config();
       if (!config) return;
-      populateForm(config);
+      await populateForm(config);
       console.log('[config] Config loaded from backend');
     } catch (e) {
       console.error('[config] Failed to load config:', e);
@@ -443,7 +443,7 @@
    * Populate all form fields from a config object.
    * @param {Object} config
    */
-  function populateForm(config) {
+  async function populateForm(config) {
     // -- General --
     var theme = config.theme || 'dark';
     if (theme !== 'dark' && theme !== 'light') theme = 'dark';
@@ -451,7 +451,7 @@
     setSelectValue('theme-select', theme);
     if (config.language) {
       setSelectValue('lang-select', config.language);
-      setLang(config.language);
+      await setLang(config.language);
     }
     if (config.tray_icon_style) {
       setSelectByText('tray-icon-select', config.tray_icon_style);
