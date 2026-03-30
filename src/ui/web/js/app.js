@@ -202,6 +202,11 @@
         'input[type="range"]::-webkit-slider-thumb{background:' + thumb + '!important}';
     }
 
+    // Repaint native Windows title bar to match theme
+    if (api && api.window_set_theme) {
+      api.window_set_theme(theme);
+    }
+
     try {
       localStorage.setItem('apk_theme', theme);
     } catch (e) { /* ignore */ }

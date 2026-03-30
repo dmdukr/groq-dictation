@@ -119,6 +119,17 @@ class WebBridge:
         if self._window:
             self._window.destroy()
 
+    def window_set_theme(self, theme: str) -> None:
+        """Repaint native Windows title bar for dark/light theme."""
+        if not self._window or sys.platform != "win32":
+            return
+        try:
+            from src.ui.settings_window import set_titlebar_theme  # noqa: PLC0415
+
+            set_titlebar_theme(self._window, theme)
+        except Exception:
+            logger.debug("Could not set titlebar theme", exc_info=True)
+
     # ------------------------------------------------------------------
     # Config
     # ------------------------------------------------------------------
