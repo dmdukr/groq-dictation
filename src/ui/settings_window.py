@@ -92,13 +92,72 @@ def _open_webview_window(config: AppConfig) -> None:
         min_size=(700, 500),
         background_color="#1e1e2e",
         on_top=True,
-        frameless=True,
     )
     bridge.set_window(window)
 
     logger.info("PyWebView Settings window created")
+
+    def _on_shown() -> None:
+        """Paint native title bar dark after window is shown."""
+        try:
+            _set_dark_titlebar(window)
+        except Exception:
+            logger.debug("Could not set dark titlebar", exc_info=True)
+
+    window.events.shown += _on_shown
     webview.start(debug=False)
     logger.info("PyWebView Settings window closed")
+
+
+def _set_dark_titlebar(window: object) -> None:
+    """Paint native Windows title bar dark using DWM API."""
+    import ctypes  # noqa: PLC0415
+    import ctypes.wintypes  # noqa: PLC0415
+
+    # Get the HWND from pywebview window
+    hwnd = None
+    import contextlib  # noqa: PLC0415
+
+    with contextlib.suppress(Exception):
+        hwnd = window.gui.BrowserView.Handle.ToInt32()  # type: ignore[union-attr]
+
+    if not hwnd:
+        with contextlib.suppress(Exception):
+            hwnd = ctypes.windll.user32.FindWindowW(None, "AI Polyglot Kit \u2014 Settings")
+
+    if not hwnd:
+        return
+
+    # DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (Windows 10 20H1+)
+    dwmwa_use_immersive_dark_mode = 20
+    value = ctypes.c_int(1)  # 1 = dark
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+        hwnd,
+        dwmwa_use_immersive_dark_mode,
+        ctypes.byref(value),
+        ctypes.sizeof(value),
+    )
+
+    # DWMWA_CAPTION_COLOR = 35 (Windows 11 22H2+)
+    dwmwa_caption_color = 35
+    # Color: #1e1e2e in BGR (COLORREF)
+    caption_color = ctypes.c_int(0x002E1E1E)
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+        hwnd,
+        dwmwa_caption_color,
+        ctypes.byref(caption_color),
+        ctypes.sizeof(caption_color),
+    )
+
+    # DWMWA_TEXT_COLOR = 36 (Windows 11 22H2+)
+    dwmwa_text_color = 36
+    text_color = ctypes.c_int(0x00E8E0E0)  # #e0e0e8 in BGR
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+        hwnd,
+        dwmwa_text_color,
+        ctypes.byref(text_color),
+        ctypes.sizeof(text_color),
+    )
 
 
 def _find_web_dir() -> Path | None:

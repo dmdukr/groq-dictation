@@ -88,57 +88,8 @@ body {
   position: relative;
 }
 
-/* Title bar — Windows style, frameless window */
-.titlebar {
-  height: 32px;
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-left: 12px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  -webkit-app-region: drag;
-  user-select: none;
-}
-.titlebar-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--fg-secondary);
-}
-.titlebar-controls {
-  display: flex;
-  height: 100%;
-  -webkit-app-region: no-drag;
-}
-.titlebar-btn {
-  width: 46px;
-  height: 100%;
-  border: none;
-  background: transparent;
-  color: var(--fg-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.1s;
-}
-.titlebar-btn:hover {
-  background: rgba(255,255,255,0.08);
-  color: var(--fg-primary);
-}
-.btn-close:hover {
-  background: #e81123;
-  color: #fff;
-}
-[data-theme="light"] .titlebar-btn:hover {
-  background: rgba(0,0,0,0.06);
-}
-[data-theme="light"] .btn-close:hover {
-  background: #e81123;
-  color: #fff;
-}
+/* Title bar hidden — using native Windows frame */
+.titlebar { display: none; }
 
 /* Main layout */
 .main { display: flex; flex: 1; overflow: hidden; }
