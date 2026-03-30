@@ -396,6 +396,19 @@
    */
   async function setLang(lang) {
     currentLang = lang;
+
+    // Notify backend (updates i18n globally + rebuilds tray menu)
+    if (api && api.set_language) {
+      try {
+        var result = await api.set_language(lang);
+        if (result && result.translations) {
+          _cachedTranslations = result.translations;
+        }
+      } catch (e) {
+        console.warn('[i18n] set_language failed:', e);
+      }
+    }
+
     await loadTranslations(lang);
     walkAndTranslate(lang);
     refreshSliderLabels();

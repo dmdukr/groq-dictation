@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Icon colors per state
 STATE_COLORS = {
-    DictationState.IDLE: "#888888",
+    DictationState.IDLE: "#00BFFF",
     DictationState.RECORDING: "#FF0000",
     DictationState.PROCESSING: "#FFA500",
     DictationState.TYPING: "#00AA00",

@@ -641,10 +641,17 @@ class WebBridge:
 
     @_safe
     def set_language(self, lang: str) -> dict[str, Any]:
-        """Change the UI language and return the new translation set."""
+        """Change the UI language, refresh tray menu, return translations."""
         from src.i18n import set_language as _set_lang  # noqa: PLC0415
 
         _set_lang(lang)
+
+        # Update config
+        self._config.ui.language = lang
+
+        # Rebuild tray menu with new language
+        _refresh_tray_menu()
+
         return {"success": True, "translations": self.get_translations()}
 
     # ------------------------------------------------------------------
@@ -922,6 +929,23 @@ class WebBridge:
                         pass
         except Exception:
             logger.exception("Failed to set autostart")
+
+
+def _refresh_tray_menu() -> None:
+    """Rebuild tray menu after language change. Best-effort."""
+    import contextlib  # noqa: PLC0415
+
+    with contextlib.suppress(Exception):
+        import gc  # noqa: PLC0415
+
+        from src.tray_app import TrayApp  # noqa: PLC0415
+
+        for obj in gc.get_referrers(TrayApp):
+            if isinstance(obj, TrayApp) and obj._icon:  # noqa: SLF001
+                obj._icon.menu = obj._create_menu()  # noqa: SLF001
+                with contextlib.suppress(Exception):
+                    obj._icon.update_menu()  # noqa: SLF001
+                break
 
 
 # Alias used by settings_window.py
