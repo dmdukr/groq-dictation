@@ -82,12 +82,44 @@ def _open_webview_window(config: AppConfig) -> None:
         logger.error("Cannot find web UI directory")
         return
 
-    # Load HTML as string and inject language setting
+    # Load HTML and apply translations server-side (no JS race conditions)
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
     lang = config.ui.language if hasattr(config, "ui") and hasattr(config.ui, "language") else "uk"
     html_path = web_dir / "index.html"
     html_content = html_path.read_text(encoding="utf-8")
 
-    # Inject language into HTML so earlyLang() can read it without URL params
+    # Apply translations directly in HTML if not English
+    if lang != "en":
+        i18n_path = web_dir / "i18n.json"
+        translations: dict[str, str] = {}
+        if i18n_path.exists():
+            all_i18n = json.loads(i18n_path.read_text(encoding="utf-8"))
+            translations = all_i18n.get(lang, {})
+        else:
+            # Try to extract from inline _EMBEDDED_I18N in HTML
+            m = re.search(r"var _EMBEDDED_I18N\s*=\s*(\{.*?\});\s*\n", html_content, re.DOTALL)
+            if m:
+                all_i18n = json.loads(m.group(1))
+                translations = all_i18n.get(lang, {})
+
+        if translations:
+            # Replace text content of data-i18n elements
+            def _replace_i18n(match: re.Match[str]) -> str:
+                key = match.group(1)
+                after_tag = match.group(2)
+                old_text = match.group(3)
+                translated = translations.get(key, old_text)
+                return f'data-i18n="{key}"{after_tag}{translated}<'
+
+            html_content = re.sub(
+                r'data-i18n="([^"]+)"([^>]*)>([^<]*)<',
+                _replace_i18n,
+                html_content,
+            )
+            logger.info("Applied %d translations to HTML (%s)", len(translations), lang)
+
     html_content = html_content.replace(
         '<html lang="en" data-theme="dark">',
         f'<html lang="{lang}" data-theme="dark" data-initial-lang="{lang}">',
