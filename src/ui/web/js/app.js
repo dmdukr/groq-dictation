@@ -39,7 +39,7 @@
    * Main initialization — called when pywebview bridge is ready
    * or on DOMContentLoaded if bridge is already present.
    */
-  function init() {
+  async function init() {
     if (window.pywebview && window.pywebview.api) {
       bridgeReady = true;
       api = window.pywebview.api;
@@ -67,10 +67,10 @@
     setupFooter();
     setupImportDropZones();
 
-    // Load initial data from backend
+    // Load initial data from backend — MUST await for translations to apply
     if (bridgeReady) {
-      loadConfig();
-      loadVersion();
+      await loadConfig();
+      await loadVersion();
     }
 
     console.log('[app.js] Settings UI initialized, bridge=' + bridgeReady);
