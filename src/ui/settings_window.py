@@ -92,17 +92,28 @@ def _open_webview_window(config: AppConfig) -> None:
 
     # Apply translations directly in HTML if not English
     if lang != "en":
-        i18n_path = web_dir / "i18n.json"
         translations: dict[str, str] = {}
+
+        # 1) Try standalone i18n.json
+        i18n_path = web_dir / "i18n.json"
         if i18n_path.exists():
             all_i18n = json.loads(i18n_path.read_text(encoding="utf-8"))
             translations = all_i18n.get(lang, {})
-        else:
-            # Try to extract from inline _EMBEDDED_I18N in HTML
-            m = re.search(r"var _EMBEDDED_I18N\s*=\s*(\{.*?\});\s*\n", html_content, re.DOTALL)
+            logger.info("i18n: loaded %d keys from i18n.json", len(translations))
+
+        # 2) Try extracting from inline JS in HTML (greedy match between = and ;)
+        if not translations:
+            m = re.search(r"var _EMBEDDED_I18N\s*=\s*(\{.+\});\s*$", html_content, re.MULTILINE)
             if m:
-                all_i18n = json.loads(m.group(1))
-                translations = all_i18n.get(lang, {})
+                try:
+                    all_i18n = json.loads(m.group(1))
+                    translations = all_i18n.get(lang, {})
+                    logger.info("i18n: extracted %d keys from inline JS", len(translations))
+                except json.JSONDecodeError:
+                    logger.warning("i18n: failed to parse inline _EMBEDDED_I18N")
+
+        if not translations:
+            logger.warning("i18n: no translations found for lang=%s", lang)
 
         if translations:
             # Replace text content of data-i18n elements
