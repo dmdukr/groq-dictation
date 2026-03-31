@@ -32,13 +32,22 @@ logger = logging.getLogger(__name__)
 def _safe(method: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that wraps a bridge method in try/except.
 
-    On error the method returns ``{"success": False, "error": "<message>"}``
-    instead of propagating the exception to the JS caller.
+    PyWebView sometimes passes extra positional args to bridge methods.
+    We try the call as-is first, then retry with only self on TypeError.
     """
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return method(*args, **kwargs)
+        except TypeError:
+            # PyWebView may pass extra args — retry with just self
+            if args:
+                try:
+                    return method(args[0])
+                except Exception as exc:
+                    logger.exception("WebBridge.%s failed", method.__name__)
+                    return {"success": False, "error": str(exc)}
+            raise
         except Exception as exc:
             logger.exception("WebBridge.%s failed", method.__name__)
             return {"success": False, "error": str(exc)}
