@@ -2618,6 +2618,9 @@
       var footerEl = document.getElementById('footer-version');
       if (footerEl) footerEl.textContent = ver;
 
+      var updateModalVer = document.getElementById('update-modal-version');
+      if (updateModalVer) updateModalVer.textContent = 'AI Polyglot Kit ' + ver;
+
       // Update badge
       var badge = document.getElementById('footer-update-badge');
       if (badge) {
@@ -2736,12 +2739,21 @@
         return;
       }
 
+      // Use e.code for layout-independent key names (always English)
       var combo = [];
       if (e.ctrlKey) combo.push('Ctrl');
       if (e.altKey) combo.push('Alt');
       if (e.shiftKey) combo.push('Shift');
-      if (['Control', 'Alt', 'Shift', 'Meta'].indexOf(e.key) === -1) {
-        combo.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+
+      var modifiers = ['ControlLeft','ControlRight','AltLeft','AltRight','ShiftLeft','ShiftRight','MetaLeft','MetaRight'];
+      if (modifiers.indexOf(e.code) === -1) {
+        // Map e.code to readable English key name
+        var keyName = e.code
+          .replace('Key', '')       // KeyA → A
+          .replace('Digit', '')     // Digit1 → 1
+          .replace('Numpad', 'Num') // Numpad0 → Num0
+          .replace('Arrow', '');    // ArrowUp → Up
+        combo.push(keyName);
       }
       if (combo.length) {
         var hotkeyDisplay = document.getElementById('hotkey-display');

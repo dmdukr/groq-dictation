@@ -291,10 +291,6 @@ class TrayApp:
                 "Restart",
                 self._on_restart_click,
             ),
-            MenuItem(
-                t("tray.about"),
-                self._on_about_click,
-            ),
             Menu.SEPARATOR,
             MenuItem(
                 t("tray.quit"),
