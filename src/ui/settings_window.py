@@ -82,9 +82,12 @@ def _open_webview_window(config: AppConfig) -> None:
         logger.error("Cannot find web UI directory")
         return
 
-    # Pass language as query param so JS can apply it before bridge is ready
+    # Pass language + cache-buster as query params
+    import time as _time  # noqa: PLC0415
+
     lang = config.ui.language if hasattr(config, "ui") and hasattr(config.ui, "language") else "uk"
-    url_with_lang = str(web_dir / "index.html") + f"?lang={lang}"
+    cache_bust = int(_time.time())
+    url_with_lang = str(web_dir / "index.html") + f"?lang={lang}&_={cache_bust}"
 
     window = webview.create_window(
         "AI Polyglot Kit \u2014 Settings",
@@ -98,6 +101,13 @@ def _open_webview_window(config: AppConfig) -> None:
         on_top=True,
     )
     bridge.set_window(window)
+
+    # Clear WebView2 cache to ensure fresh JS/CSS/HTML
+    def _clear_cache() -> None:
+        import contextlib  # noqa: PLC0415
+
+        with contextlib.suppress(Exception):
+            window.evaluate_js("caches && caches.keys().then(k => k.forEach(n => caches.delete(n)))")
 
     logger.info("PyWebView Settings window created")
 
