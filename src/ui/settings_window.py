@@ -89,7 +89,21 @@ def _open_webview_window(config: AppConfig) -> None:
     import re  # noqa: PLC0415
 
     lang = config.ui.language if hasattr(config, "ui") and hasattr(config.ui, "language") else "uk"
-    logger.info("i18n: lang=%s", lang)
+    # Also check what's actually in config.yaml on disk
+    import yaml as _yaml  # noqa: PLC0415
+
+    _cfg_path = Path(os.environ.get("APPDATA", "")) / "AIPolyglotKit" / "config.yaml"
+    _disk_lang = "?"
+    if _cfg_path.exists():
+        try:
+            with _cfg_path.open(encoding="utf-8") as _f:
+                _disk = _yaml.safe_load(_f) or {}
+            _disk_lang = _disk.get("ui", {}).get("language", "NOT SET")
+        except Exception:
+            _disk_lang = "READ ERROR"
+    else:
+        _disk_lang = "NO FILE"
+    logger.info("i18n: lang=%s, disk_lang=%s, config_path=%s", lang, _disk_lang, _cfg_path)
     html_path = web_dir / "index.html"
     html_content = html_path.read_text(encoding="utf-8")
     logger.info("i18n: HTML loaded, %d bytes", len(html_content))
