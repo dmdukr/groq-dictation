@@ -19,9 +19,6 @@
       lang = match ? match[1] : null;
     } catch(e) {}
 
-    // Debug: show what we found
-    document.title = 'APK [lang=' + lang + ' i18n=' + (typeof _EMBEDDED_I18N !== 'undefined' ? 'OK' : 'MISS') + ']';
-
     if (lang && lang !== 'en' && typeof _EMBEDDED_I18N !== 'undefined' && _EMBEDDED_I18N[lang]) {
       var tr = _EMBEDDED_I18N[lang];
       document.querySelectorAll('[data-i18n]').forEach(function (el) {
@@ -103,10 +100,6 @@
     }
 
     console.log('[app.js] Settings UI initialized, bridge=' + bridgeReady);
-
-    // DEBUG: show status in title bar
-    var dbg = 'bridge=' + bridgeReady + ' lang=' + currentLang + ' keys=' + Object.keys(translations).length;
-    document.title = 'AI Polyglot Kit — Settings [' + dbg + ']';
   }
 
   // Wait for bridge: poll every 50ms (pywebviewready event is unreliable)
