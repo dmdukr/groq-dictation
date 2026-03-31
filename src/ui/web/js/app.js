@@ -329,30 +329,22 @@
    * @param {string} lang - 'en' or 'uk'
    */
   function walkAndTranslate(lang) {
+    // Get both language dicts from embedded data
+    var enDict = (typeof _EMBEDDED_I18N !== 'undefined' && _EMBEDDED_I18N.en) || {};
+    var langDict = (typeof _EMBEDDED_I18N !== 'undefined' && _EMBEDDED_I18N[lang]) || translations;
+
     // Translate data-i18n keyed elements
     document.querySelectorAll('[data-i18n]').forEach(function (el) {
       var key = el.getAttribute('data-i18n');
-      if (!origTexts.has(el)) {
-        origTexts.set(el, el.textContent.trim());
-      }
-      if (lang === 'en') {
-        el.textContent = origTexts.get(el);
-      } else if (translations[key]) {
-        el.textContent = translations[key];
-      }
+      var text = langDict[key] || enDict[key];
+      if (text) el.textContent = text;
     });
 
-    // Translate placeholders with data-i18n-placeholder
+    // Translate placeholders
     document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-placeholder');
-      if (!el.dataset.origPlaceholder) {
-        el.dataset.origPlaceholder = el.placeholder;
-      }
-      if (lang === 'en') {
-        el.placeholder = el.dataset.origPlaceholder;
-      } else if (translations[key]) {
-        el.placeholder = translations[key];
-      }
+      var text = langDict[key] || enDict[key];
+      if (text) el.placeholder = text;
     });
 
     // Also translate plain text elements by selector (mockup compatibility)
