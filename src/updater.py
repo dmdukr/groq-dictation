@@ -95,9 +95,11 @@ class Updater:
                         "Downloaded %d bytes to %s", downloaded, installer_path
                     )
 
-            # Launch installer in foreground (visible to user)
+            # Launch installer — silent uninstall of old version, then normal install
             logger.info("Launching installer: %s", installer_path)
-            os.startfile(str(installer_path))
+            subprocess.Popen(
+                [str(installer_path), "/SILENT", "/SUPPRESSMSGBOXES"],  # noqa: S603
+            )
 
             logger.info("Exiting for update...")
             os._exit(0)
