@@ -305,7 +305,9 @@ def lemmatize(word: str) -> str:
     if _is_cyrillic(word):
         parsed = get_morph().parse(word)
         if parsed:
-            return str(parsed[0].normal_form)
+            lemma = str(parsed[0].normal_form)
+            logger.debug("keywords: lemmatize — word=%s, lemma=%s", word, lemma)
+            return lemma
     return word
 
 
@@ -328,7 +330,7 @@ def extract_keywords(text: str, max_keywords: int = 12) -> list[str]:
     if not text:
         return []
 
-    logger.debug("[keywords] extract_keywords: input text=%d chars", len(text))
+    logger.debug("keywords: extract_keywords — entry, text=%d chars", len(text))
     tokens: list[str] = _TOKEN_RE.findall(text.lower())
 
     # Step 2+3: filter and lemmatize
@@ -363,8 +365,9 @@ def extract_keywords(text: str, max_keywords: int = 12) -> list[str]:
     combined = unigrams + bigrams
     result = combined[:max_keywords]
     logger.debug(
-        "[keywords] extract_keywords: tokens_after_filter=%d, final_keywords=%d",
-        len(filtered),
+        "keywords: extract_keywords — exit, unigrams=%d, bigrams=%d, result=%d",
+        len(unigrams),
+        len(bigrams),
         len(result),
     )
     return result

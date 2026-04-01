@@ -50,37 +50,48 @@ def release_single_instance():
 def main() -> None:
     """Main entry point."""
     # Single instance check
+    logger.debug("main: checking single instance via Windows mutex")
     if not _check_single_instance():
         # Silently exit — no dialog (avoids annoying popups on boot)
+        logger.info("main: another instance already running — exiting")
         sys.exit(0)
+    logger.debug("main: single instance check passed — mutex acquired")
 
     # Cleanup duplicate autostart entries
     try:
         from .settings_ui import _cleanup_duplicate_autostart
         _cleanup_duplicate_autostart()
+        logger.debug("main: duplicate autostart cleanup completed")
     except Exception:
-        pass
+        logger.debug("main: autostart cleanup skipped (settings_ui unavailable)")
 
     # Cleanup stale PyInstaller _MEI* temp dirs
     if getattr(sys, "frozen", False):
+        logger.debug("main: frozen mode detected — cleaning stale _MEI* temp dirs")
         try:
             import shutil
             tmp = Path(tempfile.gettempdir())
             my_mei = Path(sys._MEIPASS).name if hasattr(sys, "_MEIPASS") else ""
+            cleaned_count = 0
             for d in tmp.glob("_MEI*"):
                 if d.is_dir() and d.name != my_mei:
                     try:
                         shutil.rmtree(d, ignore_errors=True)
+                        cleaned_count += 1
                     except Exception:
                         pass
-        except Exception:
-            pass
+            logger.debug("main: temp dir cleanup — removed=%d, my_mei=%s", cleaned_count, my_mei)
+        except Exception as e:
+            logger.debug("main: temp dir cleanup failed — error=%s", e)
+    else:
+        logger.debug("main: not frozen — skipping _MEI cleanup")
 
     # Enable faulthandler for segfault debugging
     _fault_log = APP_DIR / "logs" / "crash.log"
     _fault_log.parent.mkdir(parents=True, exist_ok=True)
     _fault_file = open(_fault_log, "a")
     faulthandler.enable(file=_fault_file)
+    logger.debug("main: faulthandler enabled — crash_log=%s", _fault_log)
 
     # Load configuration
     config = AppConfig.load()
@@ -117,6 +128,7 @@ def main() -> None:
     errors = config.validate()
     for err in errors:
         logger.warning(f"Config issue: {err}")
+    logger.debug("main: config validation complete — error_count=%d", len(errors))
 
     # Create engine
     engine = DictationEngine(config)
@@ -135,24 +147,26 @@ def main() -> None:
     # Main thread: wait for Settings window requests (PyWebView needs main thread)
     try:
         from .ui.settings_window import run_settings_loop, shutdown_settings_loop
-        logger.info("Main thread ready for PyWebView settings requests")
+        logger.info("main: main thread entering PyWebView settings loop")
         run_settings_loop()  # blocks until shutdown signal
+        logger.debug("main: settings loop exited normally")
     except ImportError:
-        logger.info("PyWebView not available, main thread idle")
+        logger.info("main: PyWebView not available — main thread waiting on tray_thread")
         # Keep main thread alive while tray runs
         try:
             tray_thread.join()
         except KeyboardInterrupt:
             pass
     except KeyboardInterrupt:
-        logger.info("Interrupted by user")
+        logger.info("main: interrupted by user (KeyboardInterrupt)")
     except Exception as e:
-        logger.critical(f"Fatal error: {e}", exc_info=True)
+        logger.critical("main: fatal error — %s", e, exc_info=True)
         sys.exit(1)
     finally:
+        logger.debug("main: shutdown sequence started")
         engine._telemetry.app_stop()
         engine.shutdown()
-        logger.info("AI Polyglot Kit stopped")
+        logger.info("main: AI Polyglot Kit stopped")
 
 
 if __name__ == "__main__":

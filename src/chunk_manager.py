@@ -64,6 +64,12 @@ class ChunkManager:
         # Skip first ~150ms to avoid key click / mic warmup noise
         self._warmup_skip = 5  # frames to discard at start (5 × 30ms = 150ms)
 
+        # Stats for periodic debug logging (avoid per-frame noise)
+        self._total_frames_processed: int = 0
+        self._total_speech_frames: int = 0
+        self._total_silence_frames: int = 0
+        self._chunks_emitted: int = 0
+
         logger.info(
             "ChunkManager: frame=%d ms, silence=%d frames (%d ms), "
             "min=%d frames, max=%d frames",
@@ -75,11 +81,16 @@ class ChunkManager:
     def start(self, callback: WavCallback) -> None:
         """Start the processing thread."""
         if self._thread is not None and self._thread.is_alive():
+            logger.debug("chunk_manager: start called but already running — no-op")
             return
 
         self._callback = callback
         self._stop_event.clear()
         self._reset_state()
+        self._total_frames_processed = 0
+        self._total_speech_frames = 0
+        self._total_silence_frames = 0
+        self._chunks_emitted = 0
 
         self._thread = threading.Thread(
             target=self._run, name="ChunkManager", daemon=True,
@@ -93,16 +104,22 @@ class ChunkManager:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
-        logger.info("ChunkManager stopped")
+        logger.info(
+            "chunk_manager: stopped — total_frames=%d, speech=%d, silence=%d, chunks_emitted=%d",
+            self._total_frames_processed, self._total_speech_frames,
+            self._total_silence_frames, self._chunks_emitted,
+        )
 
     def flush(self) -> bytes | None:
         """Force-emit any accumulated frames. Called when user stops dictation."""
         with self._lock:
             if not self._frames:
+                logger.debug("chunk_manager: flush called — no frames to emit")
                 return None
             # Emit everything we have, even if short
             if len(self._frames) < 3:
                 # Less than ~100ms, not useful
+                logger.debug("chunk_manager: flush — discarding %d frames (too short)", len(self._frames))
                 self._frames.clear()
                 return None
             wav_bytes = self._pack_wav(self._frames)
@@ -117,6 +134,7 @@ class ChunkManager:
         self._frames.clear()
         self._consecutive_silence = 0
         self._has_speech = False
+        logger.debug("chunk_manager: state reset — buffer cleared")
 
     def _run(self) -> None:
         """Worker loop."""
@@ -127,14 +145,32 @@ class ChunkManager:
                 continue
 
             if len(frame) != self._frame_bytes:
+                logger.debug("chunk_manager: skipping frame — bad size=%d, expected=%d",
+                             len(frame), self._frame_bytes)
                 continue
 
             # Skip warmup frames (key click / mic noise)
             if self._warmup_skip > 0:
                 self._warmup_skip -= 1
+                logger.debug("chunk_manager: warmup skip — remaining=%d", self._warmup_skip)
                 continue
 
             is_speech = self._vad.is_speech(frame, self._cfg.sample_rate)
+            self._total_frames_processed += 1
+            if is_speech:
+                self._total_speech_frames += 1
+            else:
+                self._total_silence_frames += 1
+
+            # Log VAD summary every 500 frames (~15s at 30ms/frame) to avoid noise
+            if self._total_frames_processed % 500 == 0:
+                logger.debug(
+                    "chunk_manager: VAD summary — processed=%d, speech=%d, silence=%d, "
+                    "buffer_frames=%d, consecutive_silence=%d",
+                    self._total_frames_processed, self._total_speech_frames,
+                    self._total_silence_frames, len(self._frames),
+                    self._consecutive_silence,
+                )
 
             with self._lock:
                 self._process_frame(frame, is_speech)
@@ -188,8 +224,9 @@ class ChunkManager:
         """Package frames as WAV and deliver via callback."""
         wav_bytes = self._pack_wav(frames)
         duration_ms = len(frames) * self._cfg.frame_duration_ms
-        logger.info("Emitting chunk: %d frames, %d ms, %d bytes",
-                     len(frames), duration_ms, len(wav_bytes))
+        self._chunks_emitted += 1
+        logger.info("chunk_manager: emitting chunk #%d — frames=%d, duration_ms=%d, wav_bytes=%d",
+                     self._chunks_emitted, len(frames), duration_ms, len(wav_bytes))
         if self._callback:
             try:
                 self._callback(wav_bytes)

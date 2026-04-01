@@ -106,6 +106,7 @@ class WebBridge:
 
     def set_window(self, window: Any) -> None:
         """Store a reference to the pywebview Window (set by the launcher)."""
+        logger.debug("bridge.set_window(%s)", type(window).__name__)
         self._window = window
 
     # ------------------------------------------------------------------
@@ -114,21 +115,25 @@ class WebBridge:
 
     def window_minimize(self) -> None:
         """Minimize the settings window."""
+        logger.debug("bridge.window_minimize()")
         if self._window:
             self._window.minimize()
 
     def window_maximize(self) -> None:
         """Toggle maximize/restore the settings window."""
+        logger.debug("bridge.window_maximize()")
         if self._window:
             self._window.toggle_fullscreen()
 
     def window_close(self) -> None:
         """Close the settings window."""
+        logger.debug("bridge.window_close()")
         if self._window:
             self._window.destroy()
 
     def window_set_theme(self, theme: str) -> None:
         """Repaint native Windows title bar for dark/light theme."""
+        logger.debug("bridge.window_set_theme(%s)", theme)
         if not self._window or sys.platform != "win32":
             return
         try:
@@ -146,10 +151,11 @@ class WebBridge:
     def get_config(self) -> dict[str, Any]:
         """Return config as UI payload."""
         from src.ui.settings_contract import config_to_ui  # noqa: PLC0415
-        logger.info("get_config called")
+
+        logger.debug("bridge.get_config()")
         data = config_to_ui(self._config)
         data["theme"] = self._load_theme()
-        logger.info("get_config: returning %d keys", len(data))
+        logger.debug("bridge.get_config → %d keys", len(data))
         return data
 
     @_safe
@@ -157,6 +163,7 @@ class WebBridge:
         """Apply UI payload back to config and persist."""
         from src.ui.settings_contract import ui_to_config  # noqa: PLC0415
 
+        logger.debug("bridge.save_config(%d keys)", len(data))
         theme = data.pop("theme", None)
         if theme:
             self._save_theme(theme)
@@ -167,6 +174,7 @@ class WebBridge:
 
         if self._on_save is not None:
             self._on_save(restart=True)
+        logger.debug("bridge.save_config → success")
         return {"success": True}
 
     @_safe
@@ -174,7 +182,10 @@ class WebBridge:
         """Return application name and version."""
         from src.config import APP_NAME, APP_VERSION  # noqa: PLC0415
 
-        return {"version": APP_VERSION, "app_name": APP_NAME}
+        logger.debug("bridge.get_version()")
+        result = {"version": APP_VERSION, "app_name": APP_NAME}
+        logger.debug("bridge.get_version → %s %s", APP_NAME, APP_VERSION)
+        return result
 
     # ------------------------------------------------------------------
     # Audio
@@ -186,12 +197,14 @@ class WebBridge:
 
         Returns a list of ``{"index": int, "name": str, "is_current": bool}``.
         """
+        logger.debug("bridge.get_audio_devices()")
         if self._audio is None:
+            logger.debug("bridge.get_audio_devices → [] (no audio capture)")
             return []
 
         devices = self._audio.list_devices()
         current_idx = self._config.audio.mic_device_index
-        return [
+        result = [
             {
                 "index": d.index,
                 "name": d.name,
@@ -199,6 +212,8 @@ class WebBridge:
             }
             for d in devices
         ]
+        logger.debug("bridge.get_audio_devices → %d devices", len(result))
+        return result
 
     @_safe
     def test_audio(self, device_index: int) -> dict[str, Any]:
@@ -206,7 +221,9 @@ class WebBridge:
 
         Returns ``{"success": True, "rms_db": float}`` or an error dict.
         """
+        logger.debug("bridge.test_audio(device_index=%s)", device_index)
         if self._audio is None:
+            logger.debug("bridge.test_audio → error (no AudioCapture)")
             return {"success": False, "error": "AudioCapture not available"}
 
         import math  # noqa: PLC0415
@@ -215,6 +232,7 @@ class WebBridge:
         try:
             import pyaudio  # noqa: PLC0415
         except ImportError:
+            logger.debug("bridge.test_audio → error (PyAudio not installed)")
             return {"success": False, "error": "PyAudio not installed"}
 
         pa = pyaudio.PyAudio()
@@ -235,12 +253,14 @@ class WebBridge:
 
         n_samples = len(frames) // 2
         if n_samples == 0:
+            logger.debug("bridge.test_audio → error (no audio data)")
             return {"success": False, "error": "No audio data"}
 
         samples = struct.unpack(f"<{n_samples}h", frames)
         rms = math.sqrt(sum(s * s for s in samples) / n_samples)
         rms_db = 20 * math.log10(max(rms, 1e-10))
 
+        logger.debug("bridge.test_audio → rms_db=%.1f", rms_db)
         return {"success": True, "rms_db": round(rms_db, 1)}
 
     # ------------------------------------------------------------------
@@ -254,11 +274,15 @@ class WebBridge:
         Returns ``{"name", "base_url", "supports_stt", "supports_llm"}``
         or ``None`` if the prefix is unknown.
         """
+        masked_key = api_key[:4] + "***" if len(api_key) > 4 else "****"  # noqa: PLR2004
+        logger.debug("bridge.detect_provider(api_key=%s)", masked_key)
         from src.providers import detect_provider as _detect  # noqa: PLC0415
 
         info = _detect(api_key)
         if info is None:
+            logger.debug("bridge.detect_provider → None (unknown prefix)")
             return None
+        logger.debug("bridge.detect_provider → provider=%s", info.name)
         return {
             "name": info.name,
             "base_url": info.base_url,
@@ -269,9 +293,13 @@ class WebBridge:
     @_safe
     def fetch_models(self, api_key: str, base_url: str) -> list[str]:
         """Fetch available model IDs from a provider's ``/models`` endpoint."""
+        masked_key = api_key[:4] + "***" if len(api_key) > 4 else "****"  # noqa: PLR2004
+        logger.debug("bridge.fetch_models(api_key=%s, base_url=%s)", masked_key, base_url)
         from src.providers import fetch_models as _fetch  # noqa: PLC0415
 
-        return _fetch(base_url, api_key)
+        result = _fetch(base_url, api_key)
+        logger.debug("bridge.fetch_models → %d models", len(result))
+        return result
 
     # ------------------------------------------------------------------
     # Dictionary
@@ -280,14 +308,16 @@ class WebBridge:
     @_safe
     def get_dictionary(self) -> list[dict[str, Any]]:
         """Return all dictionary terms."""
+        logger.debug("bridge.get_dictionary()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_dictionary → [] (no db)")
             return []
 
         rows = db.execute(
             "SELECT id, source_text, target_text, term_type, origin, hit_count FROM dictionary ORDER BY id"
         ).fetchall()
-        return [
+        result = [
             {
                 "id": r["id"],
                 "source": r["source_text"],
@@ -298,29 +328,37 @@ class WebBridge:
             }
             for r in rows
         ]
+        logger.debug("bridge.get_dictionary → %d terms", len(result))
+        return result
 
     @_safe
     def add_dictionary_term(self, source: str, target: str, term_type: str = "exact") -> dict[str, Any]:
         """Add a dictionary term.  Returns ``{"success": True, "id": int}``."""
+        logger.debug("bridge.add_dictionary_term(source=%r, target=%r, type=%s)", source, target, term_type)
         db = _get_db()
         if db is None:
+            logger.debug("bridge.add_dictionary_term → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         from src.context.dictionary import add_term  # noqa: PLC0415
 
         term_id = add_term(db, source, target, term_type=term_type, origin="manual")
+        logger.debug("bridge.add_dictionary_term → id=%s", term_id)
         return {"success": True, "id": term_id}
 
     @_safe
     def remove_dictionary_term(self, term_id: int) -> dict[str, Any]:
         """Remove a dictionary term by ID."""
+        logger.debug("bridge.remove_dictionary_term(term_id=%s)", term_id)
         db = _get_db()
         if db is None:
+            logger.debug("bridge.remove_dictionary_term → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         from src.context.dictionary import remove_term  # noqa: PLC0415
 
         remove_term(db, term_id)
+        logger.debug("bridge.remove_dictionary_term → success")
         return {"success": True}
 
     @_safe
@@ -329,27 +367,34 @@ class WebBridge:
 
         Returns ``{"success": True, "count": int}``.
         """
+        logger.debug("bridge.import_dictionary(data_len=%d)", len(data))
         db = _get_db()
         if db is None:
+            logger.debug("bridge.import_dictionary → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         from src.context.dictionary import import_terms  # noqa: PLC0415
 
         terms = json.loads(data)
         count = import_terms(db, terms)
+        logger.debug("bridge.import_dictionary → imported %d terms", count)
         return {"success": True, "count": count}
 
     @_safe
     def export_dictionary(self) -> str:
         """Export all dictionary terms as a JSON string."""
+        logger.debug("bridge.export_dictionary()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.export_dictionary → empty (no db)")
             return "[]"
 
         from src.context.dictionary import export_terms  # noqa: PLC0415
 
         terms = export_terms(db)
-        return json.dumps(terms, ensure_ascii=False, indent=2)
+        result = json.dumps(terms, ensure_ascii=False, indent=2)
+        logger.debug("bridge.export_dictionary → %d terms, %d chars", len(terms), len(result))
+        return result
 
     # ------------------------------------------------------------------
     # Replacements
@@ -358,15 +403,17 @@ class WebBridge:
     @_safe
     def get_replacements(self) -> list[dict[str, Any]]:
         """Return all replacement rules from the DB."""
+        logger.debug("bridge.get_replacements()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_replacements → [] (no db)")
             return []
 
         rows = db.execute(
             "SELECT id, trigger_text, replacement_text, match_mode, is_sensitive, hit_count "
             "FROM replacements ORDER BY id"
         ).fetchall()
-        return [
+        result = [
             {
                 "id": r["id"],
                 "trigger": r["trigger_text"],
@@ -377,6 +424,8 @@ class WebBridge:
             }
             for r in rows
         ]
+        logger.debug("bridge.get_replacements → %d rules", len(result))
+        return result
 
     @_safe
     def add_replacement(
@@ -387,8 +436,16 @@ class WebBridge:
         is_sensitive: bool = False,
     ) -> dict[str, Any]:
         """Add a replacement rule.  Returns ``{"success": True, "id": int}``."""
+        logger.debug(
+            "bridge.add_replacement(trigger=%r, replacement=%r, match_mode=%s, is_sensitive=%s)",
+            trigger,
+            replacement,
+            match_mode,
+            is_sensitive,
+        )
         db = _get_db()
         if db is None:
+            logger.debug("bridge.add_replacement → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         cursor = db.execute(
@@ -396,17 +453,21 @@ class WebBridge:
             [trigger, replacement, match_mode, int(is_sensitive)],
         )
         db.commit()
+        logger.debug("bridge.add_replacement → id=%s", cursor.lastrowid)
         return {"success": True, "id": cursor.lastrowid}
 
     @_safe
     def remove_replacement(self, replacement_id: int) -> dict[str, Any]:
         """Remove a replacement rule by ID."""
+        logger.debug("bridge.remove_replacement(replacement_id=%s)", replacement_id)
         db = _get_db()
         if db is None:
+            logger.debug("bridge.remove_replacement → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         db.execute("DELETE FROM replacements WHERE id = ?", [replacement_id])
         db.commit()
+        logger.debug("bridge.remove_replacement → success")
         return {"success": True}
 
     # ------------------------------------------------------------------
@@ -416,12 +477,14 @@ class WebBridge:
     @_safe
     def get_scripts(self) -> list[dict[str, Any]]:
         """Return all formatting scripts."""
+        logger.debug("bridge.get_scripts()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_scripts → [] (no db)")
             return []
 
         rows = db.execute("SELECT id, name, body, is_builtin FROM scripts ORDER BY id").fetchall()
-        return [
+        result = [
             {
                 "id": r["id"],
                 "name": r["name"],
@@ -430,6 +493,8 @@ class WebBridge:
             }
             for r in rows
         ]
+        logger.debug("bridge.get_scripts → %d scripts", len(result))
+        return result
 
     @_safe
     def save_script(self, name: str, body: str) -> dict[str, Any]:
@@ -439,14 +504,17 @@ class WebBridge:
         :mod:`src.context.script_validator`.  Returns
         ``{"success": True, "id": int}`` or an error with violations.
         """
+        logger.debug("bridge.save_script(name=%r, body_len=%d)", name, len(body))
         from src.context.script_validator import deterministic_check  # noqa: PLC0415
 
         violations = deterministic_check(body)
         if violations:
+            logger.debug("bridge.save_script → validation failed (%d violations)", len(violations))
             return {"success": False, "error": "Validation failed", "violations": violations}
 
         db = _get_db()
         if db is None:
+            logger.debug("bridge.save_script → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         cursor = db.execute(
@@ -454,13 +522,16 @@ class WebBridge:
             [name, body],
         )
         db.commit()
+        logger.debug("bridge.save_script → id=%s", cursor.lastrowid)
         return {"success": True, "id": cursor.lastrowid}
 
     @_safe
     def get_app_rules(self) -> list[dict[str, Any]]:
         """Return all application -> script mapping rules."""
+        logger.debug("bridge.get_app_rules()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_app_rules → [] (no db)")
             return []
 
         rows = db.execute(
@@ -468,7 +539,7 @@ class WebBridge:
             "FROM app_rules ar LEFT JOIN scripts s ON ar.script_id = s.id "
             "ORDER BY ar.id"
         ).fetchall()
-        return [
+        result = [
             {
                 "id": r["id"],
                 "app_name": r["app_name"],
@@ -477,12 +548,16 @@ class WebBridge:
             }
             for r in rows
         ]
+        logger.debug("bridge.get_app_rules → %d rules", len(result))
+        return result
 
     @_safe
     def save_app_rule(self, app_name: str, script_id: int) -> dict[str, Any]:
         """Save (upsert) an application rule."""
+        logger.debug("bridge.save_app_rule(app_name=%r, script_id=%s)", app_name, script_id)
         db = _get_db()
         if db is None:
+            logger.debug("bridge.save_app_rule → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         cursor = db.execute(
@@ -491,6 +566,7 @@ class WebBridge:
             [app_name, script_id],
         )
         db.commit()
+        logger.debug("bridge.save_app_rule → id=%s", cursor.lastrowid)
         return {"success": True, "id": cursor.lastrowid}
 
     # ------------------------------------------------------------------
@@ -509,8 +585,16 @@ class WebBridge:
 
         Returns ``{"items": [...], "total": int}``.
         """
+        logger.debug(
+            "bridge.get_history(limit=%s, offset=%s, app_filter=%r, time_filter=%s)",
+            limit,
+            offset,
+            app_filter,
+            time_filter,
+        )
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_history → empty (no db)")
             return {"items": [], "total": 0}
 
         where_clauses: list[str] = []
@@ -558,21 +642,26 @@ class WebBridge:
             for r in rows
         ]
 
+        logger.debug("bridge.get_history → %d items, total=%d", len(items), total)
         return {"items": items, "total": total}
 
     @_safe
     def delete_history(self, ids: list[int]) -> dict[str, Any]:
         """Delete history entries by ID list."""
+        logger.debug("bridge.delete_history(ids=%s)", ids)
         db = _get_db()
         if db is None:
+            logger.debug("bridge.delete_history → error (no db)")
             return {"success": False, "error": "Database not configured"}
 
         if not ids:
+            logger.debug("bridge.delete_history → success (empty list)")
             return {"success": True}
 
         placeholders = ",".join("?" for _ in ids)
         db.execute(f"DELETE FROM history WHERE id IN ({placeholders})", ids)  # noqa: S608
         db.commit()
+        logger.debug("bridge.delete_history → deleted %d entries", len(ids))
         return {"success": True}
 
     # ------------------------------------------------------------------
@@ -582,11 +671,12 @@ class WebBridge:
     @_safe
     def find_browsers(self) -> list[dict[str, Any]]:
         """Detect installed Chromium-based browsers."""
+        logger.debug("bridge.find_browsers()")
         from src.browser_installer import find_browsers as _find  # noqa: PLC0415
         from src.browser_installer import is_extension_installed  # noqa: PLC0415
 
         browsers = _find()
-        return [
+        result = [
             {
                 "name": b.name,
                 "exe_path": str(b.exe_path) if b.exe_path else None,
@@ -595,6 +685,8 @@ class WebBridge:
             }
             for b in browsers
         ]
+        logger.debug("bridge.find_browsers → %d browsers", len(result))
+        return result
 
     @_safe
     def install_extension(self, browser_name: str) -> dict[str, Any]:
@@ -604,11 +696,13 @@ class WebBridge:
         browser).  This method opens the browser and returns the extension
         directory path.
         """
+        logger.debug("bridge.install_extension(browser_name=%r)", browser_name)
         from src.browser_installer import find_browsers as _find  # noqa: PLC0415
 
         browsers = _find()
         target = next((b for b in browsers if b.name == browser_name), None)
         if target is None:
+            logger.debug("bridge.install_extension → error (browser not found)")
             return {"success": False, "error": f"Browser '{browser_name}' not found"}
 
         # Open the browser if possible
@@ -619,6 +713,7 @@ class WebBridge:
                 logger.warning("Failed to open %s: %s", browser_name, exc)
 
         ext_dir = Path(__file__).parent.parent.parent / "extension"
+        logger.debug("bridge.install_extension → success, ext_dir=%s", ext_dir)
         return {
             "success": True,
             "extensions_url": target.extensions_url,
@@ -632,17 +727,20 @@ class WebBridge:
     @_safe
     def get_translations(self) -> dict[str, str]:
         """Return all translation strings for the current UI language."""
+        logger.debug("bridge.get_translations()")
         from src.i18n import _STRINGS, get_language  # noqa: PLC0415
 
         lang = get_language()
         result: dict[str, str] = {}
         for key, translations in _STRINGS.items():
             result[key] = translations.get(lang) or translations.get("en") or key
+        logger.debug("bridge.get_translations → lang=%s, %d strings", lang, len(result))
         return result
 
     @_safe
     def set_language(self, lang: str) -> dict[str, Any]:
         """Change the UI language, refresh tray menu, return translations."""
+        logger.debug("bridge.set_language(%s)", lang)
         from src.i18n import set_language as _set_lang  # noqa: PLC0415
 
         _set_lang(lang)
@@ -653,6 +751,7 @@ class WebBridge:
         # Rebuild tray menu with new language
         _refresh_tray_menu()
 
+        logger.debug("bridge.set_language → success, lang=%s", lang)
         return {"success": True, "translations": self.get_translations()}
 
     # ------------------------------------------------------------------
@@ -662,8 +761,10 @@ class WebBridge:
     @_safe
     def get_stats(self) -> dict[str, Any]:
         """Gather usage statistics from the history table."""
+        logger.debug("bridge.get_stats()")
         db = _get_db()
         if db is None:
+            logger.debug("bridge.get_stats → empty (no db)")
             return {
                 "total_dictations": 0,
                 "total_duration_s": 0,
@@ -684,13 +785,20 @@ class WebBridge:
             "SELECT app, COUNT(*) AS cnt FROM history GROUP BY app ORDER BY cnt DESC LIMIT 5"
         ).fetchall()
 
-        return {
+        result = {
             "total_dictations": row["cnt"] if row else 0,
             "total_duration_s": round(row["dur"], 1) if row else 0,
             "total_words": row["words"] if row else 0,
             "corrections": row["corr"] if row else 0,
             "top_apps": [{"app": r["app"], "count": r["cnt"]} for r in top_apps_rows],
         }
+        logger.debug(
+            "bridge.get_stats → dictations=%s, words=%s, top_apps=%d",
+            result["total_dictations"],
+            result["total_words"],
+            len(result["top_apps"]),
+        )
+        return result
 
     # ------------------------------------------------------------------
     # System
@@ -703,21 +811,25 @@ class WebBridge:
         Returns ``{"available": True, "version": str, "url": str}``
         or ``{"available": False}``.
         """
+        logger.debug("bridge.check_update()")
         from src.updater import Updater  # noqa: PLC0415
 
         updater = Updater()
         result = updater.check_now()
         if result:
+            logger.debug("bridge.check_update → available, version=%s", result.get("version", ""))
             return {
                 "available": True,
                 "version": result.get("version", ""),
                 "url": result.get("url", ""),
             }
+        logger.debug("bridge.check_update → no update available")
         return {"available": False}
 
     @_safe
     def open_logs_folder(self) -> None:
         """Open the logs folder in the system file manager."""
+        logger.debug("bridge.open_logs_folder()")
         from src.config import APP_DIR  # noqa: PLC0415
 
         logs_dir = APP_DIR / "logs"
@@ -726,11 +838,14 @@ class WebBridge:
             os.startfile(str(logs_dir))  # noqa: S606
         else:
             subprocess.Popen(["xdg-open", str(logs_dir)])  # noqa: S603, S607
+        logger.debug("bridge.open_logs_folder → opened %s", logs_dir)
 
     @_safe
     def open_url(self, url: str) -> None:
         """Open a URL in the default web browser."""
+        logger.debug("bridge.open_url(%s)", url)
         webbrowser.open(url)
+        logger.debug("bridge.open_url → opened")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -738,6 +853,7 @@ class WebBridge:
 
     def _write_config(self) -> None:
         """Write current config to ``config.yaml`` in APPDATA."""
+        logger.debug("bridge._write_config()")
         from src.config import APP_DIR  # noqa: PLC0415
 
         APP_DIR.mkdir(parents=True, exist_ok=True)
@@ -752,12 +868,13 @@ class WebBridge:
                     allow_unicode=True,
                     sort_keys=False,
                 )
-            logger.info("Config saved to %s", save_path)
+            logger.debug("bridge._write_config → saved to %s", save_path)
         except Exception:
             logger.exception("Failed to save config")
 
     def _write_env(self) -> None:
         """Write the primary API key to ``.env`` in APPDATA."""
+        logger.debug("bridge._write_env()")
         from src.config import APP_DIR  # noqa: PLC0415
 
         APP_DIR.mkdir(parents=True, exist_ok=True)
@@ -765,23 +882,28 @@ class WebBridge:
         try:
             with env_path.open("w", encoding="utf-8") as f:
                 f.write(f"GROQ_API_KEY={self._config.groq.api_key}\n")
-            logger.info("API key saved to %s", env_path)
+            logger.debug("bridge._write_env → saved to %s", env_path)
         except Exception:
             logger.exception("Failed to save .env")
 
     @staticmethod
     def _load_theme() -> str:
         """Load theme preference from ``translate_settings.json``."""
+        logger.debug("bridge._load_theme()")
         from src.utils import load_translate_settings  # noqa: PLC0415
 
-        return load_translate_settings().get("theme", "dark")
+        theme = load_translate_settings().get("theme", "dark")
+        logger.debug("bridge._load_theme → %s", theme)
+        return theme
 
     @staticmethod
     def _save_theme(theme: str) -> None:
         """Persist theme preference into ``translate_settings.json``."""
+        logger.debug("bridge._save_theme(%s)", theme)
         from src.utils import save_translate_settings  # noqa: PLC0415
 
         save_translate_settings({"theme": theme})
+        logger.debug("bridge._save_theme → saved")
 
 
 def _refresh_tray_menu() -> None:

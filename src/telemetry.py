@@ -29,10 +29,13 @@ def _get_install_id() -> str:
     """Get or create a persistent anonymous install ID (UUID)."""
     id_file = APP_DIR / ".install_id"
     if id_file.exists():
-        return id_file.read_text(encoding="utf-8").strip()
+        install_id = id_file.read_text(encoding="utf-8").strip()
+        logger.debug("telemetry: loaded existing install_id — path=%s", id_file)
+        return install_id
     install_id = str(uuid.uuid4())
     id_file.parent.mkdir(parents=True, exist_ok=True)
     id_file.write_text(install_id, encoding="utf-8")
+    logger.info("telemetry: created new install_id — path=%s", id_file)
     return install_id
 
 
@@ -52,6 +55,10 @@ class TelemetryCollector:
         self._lock = threading.Lock()
         self._queue: list[dict] = []
         self._session_id = int(time.time() * 1000)
+        logger.debug(
+            "telemetry: initialized — enabled=%s, device_id=%s, session_id=%d",
+            self._enabled, self._device_id, self._session_id,
+        )
 
     # ── Event helpers ───────────────────────────────────────────
 
@@ -72,20 +79,26 @@ class TelemetryCollector:
     def track(self, event_type: str, properties: dict | None = None) -> None:
         """Queue an event for sending."""
         if not self._enabled:
+            logger.debug("telemetry: event skipped (disabled) — type=%s", event_type)
             return
         event = self._base_event(event_type)
         if properties:
             event["event_properties"] = properties
         with self._lock:
             self._queue.append(event)
+            queue_size = len(self._queue)
+        logger.debug("telemetry: event queued — type=%s, queue_size=%d", event_type, queue_size)
         # Auto-flush every 10 events or on important events
-        if len(self._queue) >= 10 or event_type in ("app_start", "app_stop"):
+        if queue_size >= 10 or event_type in ("app_start", "app_stop"):
+            logger.debug("telemetry: auto-flush triggered — reason=%s",
+                         "important_event" if event_type in ("app_start", "app_stop") else "queue_full")
             threading.Thread(target=self.flush, daemon=True).start()
 
     # ── Convenience methods ─────────────────────────────────────
 
     def app_start(self) -> None:
         self._session_id = int(time.time() * 1000)
+        logger.debug("telemetry: app_start — new session_id=%d", self._session_id)
         self.track("app_start", {
             "python_version": platform.python_version(),
         })
@@ -129,7 +142,7 @@ class TelemetryCollector:
                     content = profile_path.read_text(encoding="utf-8")
                     # Extract only Meta section (session count, languages)
                     for line in content.split("\n"):
-                        if line.startswith("- Sessions:") or line.startswith("- Languages:") or line.startswith("- Updated:"):
+                        if line.startswith(("- Sessions:", "- Languages:", "- Updated:")):
                             profile_summary += line + "\n"
                 except Exception:
                     pass
@@ -147,6 +160,7 @@ class TelemetryCollector:
             logger.debug(f"Crash report send failed: {e}")
 
     def app_stop(self) -> None:
+        logger.debug("telemetry: app_stop — flushing remaining events")
         self.track("app_stop")
         self.flush()
 
@@ -195,7 +209,7 @@ class TelemetryCollector:
                     continue
                 if in_history and line.startswith("## "):
                     break
-                if in_history and line.startswith("|") and not line.startswith("| Time") and not line.startswith("|---"):
+                if in_history and line.startswith("|") and not line.startswith(("| Time", "|---")):
                     parts = [p.strip() for p in line.split("|")]
                     # parts: ['', time, raw, normalized, edited, '']
                     if len(parts) >= 5:
@@ -279,9 +293,11 @@ class TelemetryCollector:
         """Send queued events to Amplitude."""
         with self._lock:
             if not self._queue:
+                logger.debug("telemetry: flush called — queue empty, nothing to send")
                 return
             events = self._queue.copy()
             self._queue.clear()
+        logger.debug("telemetry: flushing — events=%d", len(events))
 
         try:
             resp = httpx.post(

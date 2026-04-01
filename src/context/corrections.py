@@ -72,6 +72,7 @@ def compute_token_diffs(normalized: str, corrected: str) -> list[tuple[str, str]
 
     diffs: list[tuple[str, str]] = []
     matcher = SequenceMatcher(None, old_words, new_words)
+    logger.debug("corrections: compute_token_diffs — old_words=%d, new_words=%d", len(old_words), len(new_words))
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "replace":
@@ -88,6 +89,7 @@ def compute_token_diffs(normalized: str, corrected: str) -> list[tuple[str, str]
         elif tag == "insert":
             diffs.extend(("", new_tok) for new_tok in new_words[j1:j2])
 
+    logger.debug("corrections: compute_token_diffs — diffs_found=%d", len(diffs))
     return diffs
 
 
@@ -102,10 +104,13 @@ def classify_error(old_token: str, raw: str, normalized: str) -> str:
     in_normalized = old_token in normalized.split()
 
     if in_raw and in_normalized:
+        logger.debug("corrections: classify_error — token=%s, source=both", old_token)
         return "both"
     if in_raw and not in_normalized:
+        logger.debug("corrections: classify_error — token=%s, source=llm", old_token)
         return "llm"
     # old_token not in raw -> STT produced something different
+    logger.debug("corrections: classify_error — token=%s, source=stt", old_token)
     return "stt"
 
 
@@ -122,7 +127,7 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
     current_count = row["count"] if row is not None else 0
     if row is None or row["count"] < AUTO_PROMOTE_THRESHOLD:
         logger.debug(
-            "[corrections] auto_promote_check: %s -> %s, count=%d, threshold=%d — not promoted",
+            "corrections: auto_promote_check — %s -> %s, count=%d, threshold=%d, not promoted",
             old_token,
             new_token,
             current_count,
@@ -138,7 +143,7 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
 
     if existing is not None:
         logger.debug(
-            "[corrections] auto_promote_check: %s -> %s already in dictionary, skipping",
+            "corrections: auto_promote_check — %s -> %s already in dictionary, skipping",
             old_token,
             new_token,
         )
@@ -151,7 +156,7 @@ def auto_promote_check(db: sqlite3.Connection, old_token: str, new_token: str) -
     )
     db.commit()
     logger.info(
-        "[corrections] auto_promote_check: promoted %s -> %s (count=%d >= threshold=%d)",
+        "corrections: auto_promote_check — promoted %s -> %s (count=%d >= threshold=%d)",
         old_token,
         new_token,
         current_count,
@@ -176,7 +181,7 @@ def get_llm_confidence(db: sqlite3.Connection, cluster_id: int | None) -> float:
     ).fetchone()
 
     if row is None:
-        logger.debug("[corrections] get_llm_confidence: cluster=%d, no stats, returning 1.0", cluster_id)
+        logger.debug("corrections: get_llm_confidence — cluster=%d, no stats, confidence=1.0", cluster_id)
         return 1.0
 
     total: int = row["total_llm_resolutions"]
@@ -184,7 +189,7 @@ def get_llm_confidence(db: sqlite3.Connection, cluster_id: int | None) -> float:
 
     if total < MIN_LLM_SAMPLES:
         logger.debug(
-            "[corrections] get_llm_confidence: cluster=%d, samples=%d < %d, returning 1.0",
+            "corrections: get_llm_confidence — cluster=%d, samples=%d < %d, confidence=1.0",
             cluster_id,
             total,
             MIN_LLM_SAMPLES,
@@ -194,7 +199,7 @@ def get_llm_confidence(db: sqlite3.Connection, cluster_id: int | None) -> float:
     error_rate = errors / total
     if error_rate > HIGH_ERROR_RATE:
         logger.debug(
-            "[corrections] get_llm_confidence: cluster=%d, error_rate=%.2f > %.2f, returning %.1f",
+            "corrections: get_llm_confidence — cluster=%d, error_rate=%.2f > %.2f, confidence=%.1f",
             cluster_id,
             error_rate,
             HIGH_ERROR_RATE,
@@ -203,7 +208,7 @@ def get_llm_confidence(db: sqlite3.Connection, cluster_id: int | None) -> float:
         return DEGRADED_CONFIDENCE
 
     logger.debug(
-        "[corrections] get_llm_confidence: cluster=%d, error_rate=%.2f, returning 1.0",
+        "corrections: get_llm_confidence — cluster=%d, error_rate=%.2f, confidence=1.0",
         cluster_id,
         error_rate,
     )
@@ -216,6 +221,7 @@ def record_llm_outcome(db: sqlite3.Connection, cluster_id: int, was_corrected: b
     INSERT OR UPDATE total_llm_resolutions (+1) and llm_errors (+1 if was_corrected).
     """
     error_inc = 1 if was_corrected else 0
+    logger.debug("corrections: record_llm_outcome — cluster=%d, was_corrected=%s", cluster_id, was_corrected)
     db.execute(
         """INSERT INTO cluster_llm_stats (cluster_id, total_llm_resolutions, llm_errors)
            VALUES (?, 1, ?)
@@ -226,6 +232,7 @@ def record_llm_outcome(db: sqlite3.Connection, cluster_id: int, was_corrected: b
         [cluster_id, error_inc, error_inc],
     )
     db.commit()
+    logger.debug("corrections: record_llm_outcome — committed for cluster=%d", cluster_id)
 
 
 def learn_from_correction(
@@ -246,8 +253,14 @@ def learn_from_correction(
     4. For each diff: classify error, update correction_counts, check auto-promote
     5. Return True if stored
     """
+    logger.debug(
+        "corrections: learn_from_correction — entry, app=%s, thread=%s, cluster=%s",
+        app,
+        thread_id,
+        cluster_id,
+    )
     if not rate_limit_correction():
-        logger.warning("[corrections] learn_from_correction: rate-limited, rejecting correction")
+        logger.warning("corrections: learn_from_correction — rate-limited, rejecting")
         return False
 
     # Store encrypted correction triad
@@ -292,5 +305,5 @@ def learn_from_correction(
         auto_promote_check(db, old_tok, new_tok)
 
     db.commit()
-    logger.debug("[corrections] learn_from_correction: accepted, diffs=%d", len(diffs))
+    logger.debug("corrections: learn_from_correction — exit, accepted=True, diffs=%d", len(diffs))
     return True

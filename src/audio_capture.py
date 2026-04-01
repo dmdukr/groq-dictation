@@ -104,6 +104,15 @@ class AudioCapture:
         self._auto_gain: float = 4.0  # default until calibrated
         self._gain_calibrated: bool = False
         self._active_device_name: str = ""
+        self._callback_frame_count: int = 0  # for periodic stats logging
+        self._callback_error_count: int = 0
+
+        logger.debug(
+            "audio_capture: initialized — frame_samples=%d, frame_bytes=%d, "
+            "device_index=%s, gain=%s",
+            self._frame_samples, self._frame_bytes,
+            self._device_index, "auto" if config.gain == 0 else config.gain,
+        )
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -127,6 +136,7 @@ class AudioCapture:
     def refresh_devices(self) -> None:
         """Mark device cache as stale so next list_devices() rescans."""
         self._devices_cache = None
+        logger.debug("audio_capture: device cache invalidated")
 
     def list_devices(self) -> list[AudioDevice]:
         """Enumerate real input audio devices (filtered, no duplicates).
@@ -187,6 +197,15 @@ class AudioCapture:
                     mme_names.add(short_name)
 
             self._devices_cache = devices
+            logger.debug(
+                "audio_capture: enumerated devices — total=%d, mme=%d, other=%d",
+                len(devices), len(mme_devices), len(other_devices),
+            )
+            for d in devices:
+                logger.debug(
+                    "audio_capture: device — index=%d, name=%s, channels=%d, rate=%.0f",
+                    d.index, d.name, d.channels, d.default_sample_rate,
+                )
             return list(devices)
 
     def select_device(self, index: int | None) -> AudioDevice | None:
@@ -240,11 +259,15 @@ class AudioCapture:
             raise RuntimeError("AudioCapture is already running")
 
         # Drain stale frames
+        drained = 0
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
+                drained += 1
             except queue.Empty:
                 break
+        if drained:
+            logger.debug("audio_capture: drained %d stale frames from queue", drained)
 
         with self._pa_lock:
             pa = self._ensure_pa()
@@ -257,7 +280,9 @@ class AudioCapture:
                 self._start_multi(pa)
 
         self._running = True
-        logger.info("Audio capture started")
+        self._callback_frame_count = 0
+        self._callback_error_count = 0
+        logger.info("audio_capture: capture started — device_index=%s", self._device_index)
 
     def _start_single(self, pa: pyaudio.PyAudio, device_index: int) -> None:
         """Open a single mic stream."""
@@ -286,6 +311,8 @@ class AudioCapture:
         )
         self._stream.start_stream()
         self._active_device_name = self.get_active_device_name()
+        logger.debug("audio_capture: single stream opened and started — device=%d, active_name=%s",
+                      device_index, self._active_device_name)
 
     def _start_multi(self, pa: pyaudio.PyAudio) -> None:
         """Open ALL microphones, selector picks loudest per frame."""
@@ -371,8 +398,11 @@ class AudioCapture:
     def stop(self) -> None:
         """Stop capturing and close all audio streams."""
         if not self._running:
+            logger.debug("audio_capture: stop called but not running — no-op")
             return
         self._running = False
+        logger.debug("audio_capture: stopping — total_frames_processed=%d, errors=%d",
+                      self._callback_frame_count, self._callback_error_count)
 
         # Stop multi-mic
         if hasattr(self, '_multi_stop'):
@@ -446,13 +476,15 @@ class AudioCapture:
         Call this once at application shutdown.  After termination the
         instance must not be reused.
         """
+        logger.debug("audio_capture: terminate requested")
         self.stop()
         with self._pa_lock:
             if self._pa is not None:
                 try:
                     self._pa.terminate()
+                    logger.debug("audio_capture: PyAudio terminated successfully")
                 except Exception:
-                    logger.exception("Error terminating PyAudio")
+                    logger.exception("audio_capture: error terminating PyAudio")
                 finally:
                     self._pa = None
 
@@ -529,7 +561,7 @@ class AudioCapture:
         """
         try:
             if status_flags:
-                logger.warning("PyAudio status flags: %s", status_flags)
+                logger.warning("audio_capture: PyAudio status flags — flags=%s", status_flags)
 
             if in_data is not None:
                 # Apply gain amplification
@@ -543,8 +575,19 @@ class AudioCapture:
                         eq.put_nowait(in_data)
                     except queue.Full:
                         pass  # Drop frames for visualization, not critical
+
+                self._callback_frame_count += 1
+                # Log stats every 1000 frames (~30s at 30ms/frame) to avoid noise
+                if self._callback_frame_count % 1000 == 0:
+                    logger.debug(
+                        "audio_capture: stream callback stats — frames=%d, queue_size=%d, "
+                        "gain=%.1f, errors=%d",
+                        self._callback_frame_count, self._queue.qsize(),
+                        gain, self._callback_error_count,
+                    )
         except Exception as exc:
-            logger.error("Error in audio callback: %s", exc)
+            self._callback_error_count += 1
+            logger.error("audio_capture: error in stream callback — %s", exc)
             if self._on_error is not None:
                 try:
                     self._on_error(exc)
@@ -570,7 +613,9 @@ class AudioCapture:
         pa = self._ensure_pa()
         devices = self.list_devices()
         if not devices:
+            logger.debug("audio_capture: auto-select — no devices available")
             return None
+        logger.debug("audio_capture: auto-select — probing %d devices", len(devices))
 
         probe_frames = max(
             1,

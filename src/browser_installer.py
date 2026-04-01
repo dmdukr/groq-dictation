@@ -15,8 +15,12 @@ logger = logging.getLogger(__name__)
 def _get_extension_dir() -> Path:
     """Return path to the bundled extension directory."""
     if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "extension"  # type: ignore[attr-defined]
-    return Path(__file__).parent.parent / "extension"
+        ext_dir = Path(sys._MEIPASS) / "extension"  # type: ignore[attr-defined]
+        logger.debug("browser_installer: extension dir (frozen) — path=%s", ext_dir)
+        return ext_dir
+    ext_dir = Path(__file__).parent.parent / "extension"
+    logger.debug("browser_installer: extension dir (dev) — path=%s", ext_dir)
+    return ext_dir
 
 
 @dataclass
@@ -41,13 +45,20 @@ _PROGRAMFILES86 = Path(_os.environ.get("PROGRAMFILES(X86)", "C:/Program Files (x
 def _find_exe_registry(subkey: str, value_name: str = "") -> Path | None:
     """Try to read an exe path from HKLM App Paths or similar registry key."""
     for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        hive_name = "HKLM" if hive == winreg.HKEY_LOCAL_MACHINE else "HKCU"
         try:
             with winreg.OpenKey(hive, subkey, 0, winreg.KEY_READ) as key:
                 val, _ = winreg.QueryValueEx(key, value_name)
                 p = Path(val.strip('"'))
                 if p.exists():
+                    logger.debug("browser_installer: registry hit — hive=%s, key=%s, path=%s",
+                                 hive_name, subkey, p)
                     return p
+                else:
+                    logger.debug("browser_installer: registry path not found on disk — hive=%s, key=%s, path=%s",
+                                 hive_name, subkey, p)
         except (FileNotFoundError, OSError):
+            logger.debug("browser_installer: registry key not found — hive=%s, key=%s", hive_name, subkey)
             continue
     return None
 
@@ -140,6 +151,7 @@ def find_browsers() -> list[BrowserInfo]:
     Returns deduplicated list — Vivaldi shares Chrome's policy key,
     so both appear but only one registry entry is needed.
     """
+    logger.debug("browser_installer: scanning for Chromium browsers")
     browsers: list[BrowserInfo] = []
     for detector in (_detect_chrome, _detect_edge, _detect_vivaldi,
                      _detect_brave, _detect_opera):
@@ -147,45 +159,65 @@ def find_browsers() -> list[BrowserInfo]:
             info = detector()
             if info:
                 browsers.append(info)
+                logger.debug("browser_installer: detected — name=%s, exe=%s", info.name, info.exe_path)
+            else:
+                logger.debug("browser_installer: not found — detector=%s", detector.__name__)
         except Exception as exc:
-            logger.debug("Browser detection error in %s: %s", detector.__name__, exc)
+            logger.debug("browser_installer: detection error — detector=%s, error=%s", detector.__name__, exc)
+    logger.info("browser_installer: scan complete — found %d browser(s): %s",
+                len(browsers), [b.name for b in browsers])
     return browsers
 
 
 def is_extension_installed(browser: BrowserInfo) -> bool:
     """Check if AI Polyglot Kit extension is loaded in the browser profile."""
     if not browser.profile_dir:
+        logger.debug("browser_installer: no profile_dir for %s — cannot check extension", browser.name)
         return False
+    logger.debug("browser_installer: checking extension installation — browser=%s, profile=%s",
+                 browser.name, browser.profile_dir)
     # Chrome stores extension data in Secure Preferences (not Preferences)
     for prefs_name in ("Secure Preferences", "Preferences"):
         prefs = browser.profile_dir / "Default" / prefs_name
         if not prefs.exists():
+            logger.debug("browser_installer: prefs file not found — %s", prefs)
             continue
         try:
             import json
             data = json.loads(prefs.read_text(encoding="utf-8"))
             extensions = data.get("extensions", {}).get("settings", {})
+            logger.debug("browser_installer: checking %d extensions in %s",
+                         len(extensions), prefs_name)
             for _ext_id, ext_data in extensions.items():
                 # Check by manifest name
                 manifest = ext_data.get("manifest", {})
                 if "AI Polyglot Kit" in manifest.get("name", ""):
+                    logger.debug("browser_installer: extension found via manifest — browser=%s, ext_id=%s",
+                                 browser.name, _ext_id)
                     return True
                 # Check by path (unpacked extensions may lack manifest in prefs)
                 ext_path = ext_data.get("path", "")
                 if "extension" in ext_path and "AI Polyglot Kit" in ext_path:
+                    logger.debug("browser_installer: extension found via path — browser=%s, path=%s",
+                                 browser.name, ext_path)
                     return True
         except Exception as e:
-            logger.debug("Could not check extension status for %s: %s", browser.name, e)
+            logger.debug("browser_installer: could not check extension status — browser=%s, error=%s",
+                         browser.name, e)
+    logger.debug("browser_installer: extension not installed — browser=%s", browser.name)
     return False
 
 
 def install_extension(browser: BrowserInfo) -> None:
     """Show install instructions dialog with action buttons."""
+    logger.info("browser_installer: showing install dialog — browser=%s", browser.name)
     ext_dir = _get_extension_dir()
     if not ext_dir.exists() or not (ext_dir / "manifest.json").exists():
+        logger.error("browser_installer: extension directory missing — path=%s", ext_dir)
         raise FileNotFoundError(f"Extension not found at {ext_dir}")
 
     ext_path = str(ext_dir)
+    logger.debug("browser_installer: extension path for install — %s", ext_path)
 
     import tkinter as tk
     from tkinter import ttk
@@ -207,9 +239,10 @@ def install_extension(browser: BrowserInfo) -> None:
     def _open_browser() -> None:
         if browser.exe_path:
             try:
+                logger.debug("browser_installer: opening browser — exe=%s", browser.exe_path)
                 subprocess.Popen([str(browser.exe_path)])
             except Exception as e:
-                logger.error("Failed to open %s: %s", browser.name, e)
+                logger.error("browser_installer: failed to open browser — name=%s, error=%s", browser.name, e)
 
     # Step 1: Open extensions page
     ttk.Label(frame, text="Step 1:", font=("Segoe UI", 9, "bold")).grid(
@@ -271,4 +304,6 @@ def install_extension(browser: BrowserInfo) -> None:
     dlg.geometry(f"+{x}+{y}")
 
     dlg.grab_set()
+    logger.debug("browser_installer: install dialog displayed — waiting for user action")
     dlg.wait_window()
+    logger.debug("browser_installer: install dialog closed")

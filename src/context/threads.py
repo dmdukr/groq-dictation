@@ -63,7 +63,7 @@ def find_active_thread(
     ).fetchall()
 
     if not threads:
-        logger.debug("[threads] find_active_thread: no active threads found")
+        logger.debug("threads: find_active_thread — no active threads after cutoff=%s", cutoff)
         return None
 
     keyword_set = set(keywords)
@@ -105,7 +105,7 @@ def find_active_thread(
             best_row = thread
 
     logger.debug(
-        "[threads] find_active_thread: checked=%d threads, best_score=%.1f, match=%s",
+        "threads: find_active_thread — checked=%d, best_score=%.1f, match=%s",
         len(threads),
         best_score,
         best_row["id"] if best_row is not None else None,
@@ -137,12 +137,12 @@ def assign_to_thread(
         if row is not None:
             thread_id = int(row["id"])
             logger.debug(
-                "[threads] assign_to_thread: no keywords, reusing recent thread=%d (app=%s)",
+                "threads: assign_to_thread — no keywords, reusing thread=%d, app=%s",
                 thread_id,
                 current_app,
             )
             return thread_id
-        logger.debug("[threads] assign_to_thread: no keywords, no active thread — orphan")
+        logger.debug("threads: assign_to_thread — no keywords, no active thread, orphan")
         return None
 
     # Has keywords path
@@ -151,20 +151,21 @@ def assign_to_thread(
         thread_id = int(match["id"])
         update_thread(db, thread_id, keywords, current_app)
         logger.debug(
-            "[threads] assign_to_thread: matched existing thread=%d (app=%s)",
+            "threads: assign_to_thread — matched existing thread=%d, app=%s",
             thread_id,
             current_app,
         )
         return thread_id
 
     # No match: expire old threads, save fingerprints, create new thread
+    logger.debug("threads: assign_to_thread — no match, expiring old threads for app=%s", current_app)
     expired_ids = expire_threads(db, current_app)
     for eid in expired_ids:
         save_fingerprint(db, eid)
 
     new_thread_id = create_thread(db, keywords, current_app)
     logger.debug(
-        "[threads] assign_to_thread: created new thread=%d (app=%s, keywords=%d)",
+        "threads: assign_to_thread — created new thread=%d, app=%s, keywords=%d",
         new_thread_id,
         current_app,
         len(keywords),
@@ -195,11 +196,12 @@ def create_thread(
         )
 
     db.commit()
-    logger.info(
-        "[threads] create_thread: thread_id=%d, app=%s, keywords=%d",
+    logger.debug(
+        "threads: create_thread — thread_id=%d, app=%s, keywords=%d, cluster=%s",
         thread_id,
         app,
         len(keywords),
+        cluster_id,
     )
     return thread_id
 
@@ -226,7 +228,7 @@ def update_thread(
         [app, now, thread_id],
     )
     db.commit()
-    logger.debug("[threads] update_thread: thread_id=%d, app=%s, new_keywords=%d", thread_id, app, len(keywords))
+    logger.debug("threads: update_thread — thread_id=%d, app=%s, new_keywords=%d", thread_id, app, len(keywords))
 
 
 def expire_threads(db: sqlite3.Connection, current_app: str) -> list[int]:
@@ -252,7 +254,9 @@ def expire_threads(db: sqlite3.Connection, current_app: str) -> list[int]:
             expired_ids,
         )
         db.commit()
-        logger.info("[threads] expire_threads: expired %d threads for app=%s", len(expired_ids), current_app)
+        logger.debug("threads: expire_threads — expired=%d, app=%s, ids=%s", len(expired_ids), current_app, expired_ids)
+    else:
+        logger.debug("threads: expire_threads — none expired for app=%s", current_app)
 
     return expired_ids
 
@@ -274,7 +278,7 @@ def save_fingerprint(db: sqlite3.Connection, thread_id: int) -> int | None:
     message_count: int = thread["message_count"]
     if message_count < 3:  # noqa: PLR2004
         logger.debug(
-            "[threads] save_fingerprint: skipped thread_id=%d (message_count=%d < 3)",
+            "threads: save_fingerprint — skipped thread=%d, message_count=%d < 3",
             thread_id,
             message_count,
         )
@@ -300,5 +304,5 @@ def save_fingerprint(db: sqlite3.Connection, thread_id: int) -> int | None:
         )
 
     db.commit()
-    logger.debug("[threads] save_fingerprint: thread_id=%d -> fingerprint_id=%d", thread_id, fp_id)
+    logger.debug("threads: save_fingerprint — thread=%d -> fingerprint=%d, keywords=%d", thread_id, fp_id, len(kw_rows))
     return fp_id

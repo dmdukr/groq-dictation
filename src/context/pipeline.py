@@ -118,17 +118,20 @@ class DictationPipeline:
         7. Return PipelineResult
         """
         if not raw_text.strip():
+            logger.debug("pipeline: process — skipped empty text")
             return PipelineResult(raw_text=raw_text, normalized_text=raw_text)
 
-        logger.debug("[pipeline] process: starting, text=%d chars, app=%s", len(raw_text), app)
+        logger.debug("pipeline: process — entry, chars=%d, app=%s, window=%s", len(raw_text), app, window_title)
 
         # Stage 3: Replacements (placeholder)
+        logger.debug("pipeline: stage3 replacements — no-op placeholder")
         replaced_text = raw_text
 
         # Stage 4: Context Engine
+        logger.debug("pipeline: stage4 context — resolving text=%d chars", len(replaced_text))
         ctx: ContextResult = self._context_engine.resolve(replaced_text, app)
         logger.debug(
-            "[pipeline] process: stage4 context — thread=%s, cluster=%s, keywords=%d, resolved=%d",
+            "pipeline: stage4 context — thread=%s, cluster=%s, keywords=%d, resolved=%d",
             ctx.thread_id,
             ctx.cluster_id,
             len(ctx.keywords),
@@ -151,21 +154,35 @@ class DictationPipeline:
             )
             normalized_text = self._llm.normalize(llm_prompt, replaced_text)
             llm_called = True
-            logger.debug("[pipeline] process: stage5 LLM called, prompt=%d chars", len(llm_prompt))
+            logger.debug(
+                "pipeline: stage5 LLM — called, prompt=%d chars, output=%d chars",
+                len(llm_prompt),
+                len(normalized_text),
+            )
         else:
-            logger.debug("[pipeline] process: stage5 LLM skipped (enable_llm=%s)", self._config.enable_llm)
+            logger.debug(
+                "pipeline: stage5 LLM — skipped, enable_llm=%s, llm_set=%s",
+                self._config.enable_llm,
+                self._llm is not None,
+            )
 
         # Stage 6: Local post-processing
         exact_terms = get_exact_terms(self._db)
         if exact_terms:
+            pre_len = len(normalized_text)
             normalized_text = apply_exact_replacements(
                 normalized_text,
                 exact_terms,
                 ctx.resolved_terms,
             )
-            logger.debug("[pipeline] process: stage6 post-processing applied, exact_terms=%d", len(exact_terms))
+            logger.debug(
+                "pipeline: stage6 post-processing — exact_terms=%d, changed=%s",
+                len(exact_terms),
+                pre_len != len(normalized_text),
+            )
 
         # Stage 7: Save history
+        logger.debug("pipeline: stage7 history — saving to db")
         self._save_history(
             raw_text=raw_text,
             normalized_text=normalized_text,
@@ -177,7 +194,7 @@ class DictationPipeline:
         )
 
         logger.debug(
-            "[pipeline] process: complete, llm_called=%s, output=%d chars",
+            "pipeline: process — exit, llm_called=%s, output=%d chars",
             llm_called,
             len(normalized_text),
         )
@@ -203,6 +220,7 @@ class DictationPipeline:
         cluster_id: int | None,
     ) -> bool:
         """Process user correction feedback."""
+        logger.debug("pipeline: process_correction — entry, app=%s, thread=%s, cluster=%s", app, thread_id, cluster_id)
         result = learn_from_correction(
             self._db,
             raw,
@@ -213,7 +231,7 @@ class DictationPipeline:
             cluster_id,
             encrypt_fn=mock_encrypt,
         )
-        logger.debug("[pipeline] process_correction: accepted=%s, thread=%s, cluster=%s", result, thread_id, cluster_id)
+        logger.debug("pipeline: process_correction — exit, accepted=%s", result)
         return result
 
     def _get_app_script(self, app: str) -> str | None:
@@ -224,7 +242,9 @@ class DictationPipeline:
                WHERE ar.app_name = ?""",
             [app],
         ).fetchone()
-        return str(row["body"]) if row else None
+        result = str(row["body"]) if row else None
+        logger.debug("pipeline: _get_app_script — app=%s, found=%s", app, result is not None)
+        return result
 
     def _save_history(
         self,
@@ -237,6 +257,13 @@ class DictationPipeline:
         llm_prompt: str | None = None,
     ) -> int:
         """Save dictation to history table. Returns history_id."""
+        logger.debug(
+            "pipeline: _save_history — app=%s, thread=%s, cluster=%s, words=%d",
+            app,
+            thread_id,
+            cluster_id,
+            len(raw_text.split()),
+        )
         cursor = self._db.execute(
             """INSERT INTO history
                (raw_text_enc, normalized_text_enc, llm_prompt_enc,
@@ -255,4 +282,5 @@ class DictationPipeline:
         )
         self._db.commit()
         history_id: int = cursor.lastrowid  # type: ignore[assignment]
+        logger.debug("pipeline: _save_history — history_id=%d", history_id)
         return history_id

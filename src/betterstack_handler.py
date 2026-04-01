@@ -20,11 +20,19 @@ FLUSH_INTERVAL = 5.0
 MAX_BATCH = 50
 
 
+class _NoHttpxFilter(logging.Filter):
+    """Block httpx logs to prevent infinite ingest→log→ingest loop."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.name.startswith("httpx")
+
+
 class BetterStackHandler(logging.Handler):
     """Async logging handler that sends logs to Axiom."""
 
     def __init__(self) -> None:
         super().__init__()
+        self.addFilter(_NoHttpxFilter())
         self._queue: queue.Queue[dict[str, str]] = queue.Queue(maxsize=1000)
         self._thread = threading.Thread(target=self._flush_loop, name="AxiomLogs", daemon=True)
         self._thread.start()

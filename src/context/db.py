@@ -22,6 +22,7 @@ def configure(db_path: str) -> None:
     """Set the database file path. Must be called before get_connection()."""
     global _db_path  # noqa: PLW0603
     _db_path = db_path
+    logger.debug("db: configure — path=%s", db_path)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -34,6 +35,11 @@ def get_connection() -> sqlite3.Connection:
         if not _db_path:
             msg = "Database not configured. Call db.configure(path) first."
             raise RuntimeError(msg)
+        logger.debug(
+            "db: get_connection — creating connection, path=%s, thread=%s",
+            _db_path,
+            threading.current_thread().name,
+        )
         conn = sqlite3.connect(_db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode = WAL")
@@ -42,6 +48,7 @@ def get_connection() -> sqlite3.Connection:
         conn.execute("PRAGMA cache_size = -64000")
         conn.execute("PRAGMA temp_store = MEMORY")
         _local.conn = conn
+        logger.debug("db: get_connection — connection ready, WAL mode enabled")
     return conn
 
 
@@ -190,16 +197,20 @@ CREATE INDEX IF NOT EXISTS idx_dictionary ON dictionary(source_text);
 
 def init_schema(conn: sqlite3.Connection | None = None) -> None:
     """Create all tables and indexes. Safe to call multiple times (IF NOT EXISTS)."""
+    logger.debug("db: init_schema — starting, conn_provided=%s", conn is not None)
     db = conn or get_connection()
     db.executescript(SCHEMA_SQL)
     logger.info("Context Engine schema initialized")
+    logger.debug("db: init_schema — complete")
 
 
 def check_integrity(conn: sqlite3.Connection | None = None) -> bool:
     """Run startup integrity check. Returns True if OK."""
+    logger.debug("db: check_integrity — starting")
     db = conn or get_connection()
     result = db.execute("PRAGMA integrity_check(1)").fetchone()
     if result is None or result[0] != "ok":
         logger.error("Database integrity check failed: %s", result)
         return False
+    logger.debug("db: check_integrity — passed")
     return True

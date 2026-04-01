@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Default paths
-APP_VERSION = "7.0.1"
+APP_VERSION = "7.0.2"
 APP_NAME = "AIPolyglotKit"
 GITHUB_REPO = "dmdukr/ai-polyglot-kit"
 APP_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
@@ -144,10 +144,16 @@ class AppConfig:
         env_path = Path(".env")
         if env_path.exists():
             load_dotenv(env_path)
+            logger.debug("config: loaded .env — path=%s", env_path.resolve())
+        else:
+            logger.debug("config: .env not found — path=%s", env_path.resolve())
         # Also check APPDATA location
         appdata_env = APP_DIR / ".env"
         if appdata_env.exists():
             load_dotenv(appdata_env)
+            logger.debug("config: loaded APPDATA .env — path=%s", appdata_env)
+        else:
+            logger.debug("config: APPDATA .env not found — path=%s", appdata_env)
 
         config = cls()
 
@@ -156,26 +162,39 @@ class AppConfig:
             appdata_config = APP_DIR / "config.yaml"
             if appdata_config.exists():
                 config_path = appdata_config
+                logger.debug("config: using APPDATA config — path=%s", appdata_config)
             else:
                 config_path = DEFAULT_CONFIG_PATH
+                logger.debug("config: using local default config — path=%s", DEFAULT_CONFIG_PATH)
         config_path = Path(config_path)
 
         if config_path.exists():
-            logger.info(f"Loading config from {config_path}")
+            logger.info("config: loading config file — path=%s", config_path)
             with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             config._apply_dict(data)
+            logger.debug("config: config file loaded successfully — keys=%s", list(data.keys()))
         else:
-            logger.warning(f"Config file not found at {config_path}, using defaults")
+            logger.warning("config: config file not found, using defaults — path=%s", config_path)
 
         # Override API key from environment
         env_key = os.environ.get("GROQ_API_KEY")
         if env_key:
             config.groq.api_key = env_key
+            logger.debug("config: GROQ_API_KEY loaded from environment — key_len=%d", len(env_key))
+        else:
+            logger.debug("config: GROQ_API_KEY not set in environment")
 
         # Auto-migrate old groq config → provider slots
         config._migrate_groq_to_providers()
 
+        logger.debug(
+            "config: final config — hotkey=%s, hotkey_mode=%s, sample_rate=%d, "
+            "vad_aggressiveness=%d, normalization_enabled=%s, telemetry_enabled=%s",
+            config.hotkey, config.hotkey_mode, config.audio.sample_rate,
+            config.audio.vad_aggressiveness, config.normalization.enabled,
+            config.telemetry.enabled,
+        )
         return config
 
     def _migrate_groq_to_providers(self) -> None:
@@ -212,6 +231,7 @@ class AppConfig:
         """
         for f in fields(self):
             if f.name not in data:
+                logger.debug("config: _apply_dict — using default for field=%s", f.name)
                 continue
             value = data[f.name]
             attr = getattr(self, f.name)
@@ -222,10 +242,14 @@ class AppConfig:
                         sub_val = value[sub_f.name]
                         # Don't blank api_key from yaml (use .env instead)
                         if f.name == "groq" and sub_f.name == "api_key" and not sub_val:
+                            logger.debug("config: _apply_dict — skipping blank groq.api_key")
                             continue
                         setattr(attr, sub_f.name, sub_val)
+                logger.debug("config: _apply_dict — merged nested field=%s, sub_keys=%s",
+                             f.name, list(value.keys()))
             else:
                 setattr(self, f.name, value)
+                logger.debug("config: _apply_dict — set field=%s", f.name)
 
     def to_dict(self) -> dict:
         """Serialize config to a dict suitable for YAML save.
@@ -234,6 +258,7 @@ class AppConfig:
         """
         data = asdict(self)
         data.get("groq", {})["api_key"] = ""  # never save key in yaml
+        logger.debug("config: to_dict — serialized config for save, top_keys=%s", list(data.keys()))
         return data
 
     def validate(self) -> list[str]:
@@ -255,6 +280,10 @@ class AppConfig:
             errors.append("frame_duration_ms must be 10, 20, or 30 (webrtcvad requirement)")
         if self.text_injection.method not in ("sendinput", "clipboard"):
             errors.append("text_injection.method must be 'sendinput' or 'clipboard'")
+        if errors:
+            logger.info("config: validation failed — errors=%s", errors)
+        else:
+            logger.debug("config: validation passed — no errors")
         return errors
 
 
@@ -263,6 +292,8 @@ def setup_logging(config: LoggingConfig) -> None:
     log_dir = APP_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / config.file
+    logger.debug("config: setup_logging — level=%s, file=%s, max_size_mb=%d, backup_count=%d",
+                 config.level, log_file, config.max_size_mb, config.backup_count)
 
     from logging.handlers import RotatingFileHandler
 

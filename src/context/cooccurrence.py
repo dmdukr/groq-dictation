@@ -48,6 +48,7 @@ def update_cooccurrence(db: sqlite3.Connection, keywords: list[str], cluster_id:
     - All pairs in single transaction
     """
     if len(keywords) < _MIN_PAIR_SIZE:
+        logger.debug("cooccurrence: update_cooccurrence — skipped, keywords=%d < %d", len(keywords), _MIN_PAIR_SIZE)
         return
 
     now = _utcnow_iso()
@@ -57,7 +58,7 @@ def update_cooccurrence(db: sqlite3.Connection, keywords: list[str], cluster_id:
         pairs.append((canonical[0], canonical[1]))
 
     logger.debug(
-        "[cooccurrence] update_cooccurrence: pairs=%d, cluster_id=%d",
+        "cooccurrence: update_cooccurrence — pairs=%d, cluster_id=%d",
         len(pairs),
         cluster_id,
     )
@@ -82,6 +83,7 @@ def query_cooccurrence(db: sqlite3.Connection, term: str, context_terms: list[st
     - Guard against future dates (clock skew): max(days, 0) then max(days, 1)
     """
     if not context_terms:
+        logger.debug("cooccurrence: query_cooccurrence — skipped, no context_terms")
         return []
 
     ph, ctx_params = _build_in_clause(context_terms)
@@ -105,7 +107,7 @@ def query_cooccurrence(db: sqlite3.Connection, term: str, context_terms: list[st
     params: list[str] = [term, *ctx_params, term, *ctx_params]
     rows = db.execute(sql, params).fetchall()
     logger.debug(
-        "[cooccurrence] query_cooccurrence: term=%s, context_terms=%d, results=%d",
+        "cooccurrence: query_cooccurrence — term=%s, context_terms=%d, results=%d",
         term,
         len(context_terms),
         len(rows),
@@ -139,7 +141,7 @@ def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> t
     rows = db.execute(sql, params).fetchall()
 
     if not rows:
-        logger.debug("[cooccurrence] should_update_cooccurrence: no data, allowing update")
+        logger.debug("cooccurrence: should_update_cooccurrence — no data, allowing update")
         return True, None
 
     best_cluster_id: int = rows[0]["cluster_id"]
@@ -149,8 +151,8 @@ def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> t
         second_score: int = rows[1]["total_weight"]
         if second_score > _MIXED_TOPIC_THRESHOLD * best_score:
             logger.warning(
-                "[cooccurrence] should_update_cooccurrence: mixed topic detected, "
-                "best_cluster=%d score=%d, second_score=%d — blocking update",
+                "cooccurrence: should_update_cooccurrence — mixed topic detected, "
+                "best_cluster=%d, score=%d, second_score=%d, blocking",
                 best_cluster_id,
                 best_score,
                 second_score,
@@ -158,7 +160,7 @@ def should_update_cooccurrence(db: sqlite3.Connection, keywords: list[str]) -> t
             return False, best_cluster_id
 
     logger.debug(
-        "[cooccurrence] should_update_cooccurrence: allowed, best_cluster=%d, score=%d",
+        "cooccurrence: should_update_cooccurrence — allowed, best_cluster=%d, score=%d",
         best_cluster_id,
         best_score,
     )
@@ -178,7 +180,7 @@ def prune_cooccurrence(db: sqlite3.Connection, *, max_age_days: int = 90) -> int
             [max_age_days],
         )
     deleted: int = cursor.rowcount
-    logger.info("[cooccurrence] prune_cooccurrence: deleted=%d edges older than %d days", deleted, max_age_days)
+    logger.debug("cooccurrence: prune_cooccurrence — deleted=%d, max_age_days=%d", deleted, max_age_days)
     return deleted
 
 
@@ -193,10 +195,11 @@ def emergency_prune(db: sqlite3.Connection, *, max_edges: int = 200_000, min_wei
     count: int = row["cnt"]
 
     if count <= max_edges:
+        logger.debug("cooccurrence: emergency_prune — skipped, count=%d <= max=%d", count, max_edges)
         return 0
 
     logger.warning(
-        "[cooccurrence] emergency_prune triggered: %d edges exceeds max=%d",
+        "cooccurrence: emergency_prune — triggered, count=%d > max=%d",
         count,
         max_edges,
     )
@@ -207,8 +210,8 @@ def emergency_prune(db: sqlite3.Connection, *, max_edges: int = 200_000, min_wei
             [min_weight],
         )
     deleted: int = cursor.rowcount
-    logger.info(
-        "[cooccurrence] emergency_prune: deleted %d edges with weight < %d (was %d rows)",
+    logger.debug(
+        "cooccurrence: emergency_prune — deleted=%d, min_weight=%d, was=%d",
         deleted,
         min_weight,
         count,
