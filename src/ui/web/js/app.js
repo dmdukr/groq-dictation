@@ -324,133 +324,29 @@
    * @param {Object} config
    */
   async function populateForm(config) {
-    // -- General --
-    var theme = config.theme || 'dark';
-    if (theme !== 'dark' && theme !== 'light') theme = 'dark';
-    setTheme(theme);
-    setSelectValue('theme-select', theme);
-    if (config.language) {
-      setSelectValue('lang-select', config.language);
-      await setLang(config.language);
-    }
-    if (config.tray_icon_style) {
-      setSelectByText('tray-icon-select', config.tray_icon_style);
-    }
-    setBoolToggle('toggle-autostart', config.autostart);
-    setBoolToggle('toggle-start-minimized', config.start_minimized);
-    setBoolToggle('toggle-check-updates', config.check_updates);
-    setBoolToggle('toggle-telemetry', config.telemetry);
+    // Declarative binding handles all data-cfg elements
+    FormBind.populate(config);
 
-    // Hotkeys
+    // Theme (external, not in AppConfig)
+    var theme = config.theme || 'dark';
+    setTheme(theme);
+
+    // Language (triggers i18n)
+    if (config.language) {
+      I18n.setLang(config.language);
+      var langSelect = document.getElementById('lang-select');
+      if (langSelect) langSelect.value = config.language;
+    }
+
+    // Hotkeys (custom capture UI)
     if (config.hotkeys) {
       setHotkeyDisplay('hotkey-record', config.hotkeys.record);
       setHotkeyDisplay('hotkey-feedback', config.hotkeys.feedback);
       setHotkeyDisplay('hotkey-cancel', config.hotkeys.cancel);
       setHotkeyDisplay('hotkey-paste-last', config.hotkeys.paste_last);
       setHotkeyDisplay('hotkey-translate', config.hotkeys.translate);
-      setInputValue('hold-time-input', config.hotkeys.min_hold_ms);
-    }
-
-    // Notifications
-    setBoolToggle('toggle-sound-feedback', config.sound_feedback);
-    setBoolToggle('toggle-show-overlay', config.show_overlay);
-    if (config.overlay_position) {
-      setSelectByText('overlay-position-select', config.overlay_position);
-    }
-
-    // -- Audio --
-    if (config.audio) {
-      setSelectValue('mic-select', config.audio.device_id);
-      setBoolToggle('toggle-auto-switch', config.audio.auto_switch_device);
-      setBoolToggle('toggle-rnnoise', config.audio.noise_suppression);
-      setBoolToggle('toggle-agc', config.audio.agc);
-      setSliderValue('rms-slider', config.audio.target_volume);
-      setBoolToggle('toggle-duck', config.audio.duck_other_apps);
-      setSliderValue('duck-slider', config.audio.duck_amount);
-      setSelectValue('sample-rate-select', config.audio.sample_rate);
-      setBoolToggle('toggle-save-recordings', config.audio.save_recordings);
-      setInputValue('save-path-input', config.audio.save_path);
-      setSelectValue('auto-delete-select', config.audio.auto_delete);
-    }
-
-    // -- STT / Dictation --
-    if (config.stt) {
-      setSelectValue('stt-mode-select', config.stt.mode);
-      setSliderValue('beam-slider', config.stt.beam_size);
-      setSliderValue('whisper-temp-slider', config.stt.temperature);
-      setSliderValue('cpu-slider', config.stt.cpu_usage);
-      if (config.stt.vad_sensitivity !== undefined) {
-        setSelectValue('vad-select', config.stt.vad_sensitivity);
-      }
-    }
-
-    // -- LLM --
-    if (config.llm) {
-      setBoolToggle('toggle-llm-enabled', config.llm.enabled);
-      setBoolToggle('toggle-punctuation', config.llm.add_punctuation);
-      setBoolToggle('toggle-grammar', config.llm.fix_grammar);
-      setBoolToggle('toggle-terminology', config.llm.fix_terminology);
-      setBoolToggle('toggle-capitalize', config.llm.capitalize);
-      setBoolToggle('toggle-numbers', config.llm.number_formatting);
-      setSliderValue('temp-slider', config.llm.temperature);
-      setInputValue('max-tokens-input', config.llm.max_tokens);
-      setSelectValue('feedback-mode-select', config.llm.feedback_mode);
-    }
-
-    // -- Dictation --
-    if (config.dictation) {
-      setBoolToggle('toggle-context-aware', config.dictation.context_aware);
-      setSelectValue('default-style-select', config.dictation.default_style);
-      setSelectValue('injection-method-select', config.dictation.injection_method);
-      setBoolToggle('toggle-auto-fallback-clipboard', config.dictation.auto_fallback_clipboard);
-      setInputValue('typing-speed-input', config.dictation.typing_speed);
-      setBoolToggle('toggle-sanitize-terminal', config.dictation.sanitize_terminal);
-      setBoolToggle('toggle-confirm-multiline', config.dictation.confirm_multiline_terminal);
-    }
-
-    // -- Speaker Lock --
-    if (config.speaker_lock) {
-      setBoolToggle('toggle-speaker-lock', config.speaker_lock.enabled);
-      setSliderValue('speaker-thresh', config.speaker_lock.threshold);
-      setSelectValue('speaker-timeout-select', config.speaker_lock.timeout_action);
-      setBoolToggle('toggle-log-rejected', config.speaker_lock.log_rejected);
-    }
-
-    // -- Translate --
-    if (config.translate) {
-      setBoolToggle('toggle-page-translation', config.translate.enabled);
-      setSelectValue('target-lang-select', config.translate.target_language);
-      setBoolToggle('toggle-browser-dictation', config.translate.browser_dictation);
-      setBoolToggle('toggle-page-context', config.translate.use_page_context);
-    }
-
-    // -- Network --
-    if (config.network) {
-      setInputValue('stt-timeout-input', config.network.stt_timeout);
-      setInputValue('llm-timeout-input', config.network.llm_timeout);
-      setInputValue('probe-timeout-input', config.network.probe_timeout);
-      setBoolToggle('proxy-toggle', config.network.proxy_enabled);
-      setInputValue('proxy-url-input', config.network.proxy_url);
-      setInputValue('proxy-user-input', config.network.proxy_username);
-      setInputValue('proxy-pass-input', config.network.proxy_password);
-      setInputValue('listen-port-input', config.network.listen_port);
-    }
-
-    // -- History --
-    if (config.history) {
-      setBoolToggle('toggle-sensitive-mode', config.history.sensitive_mode);
-      setInputValue('retention-input', config.history.retention_days);
-      setBoolToggle('toggle-store-raw', config.history.store_raw);
-      setBoolToggle('toggle-encrypt-history', config.history.encrypt);
-    }
-
-    // -- Offline --
-    if (config.offline) {
-      setSelectValue('active-stt-model-select', config.offline.active_stt_model);
-      setSelectValue('active-llm-model-select', config.offline.active_llm_model);
-      setBoolToggle('toggle-verify-integrity', config.offline.verify_integrity);
-      setSelectValue('download-source-select', config.offline.download_source);
-      setSliderValue('llm-offline-temp-slider', config.offline.llm_temperature);
+    } else if (config.hotkey) {
+      setHotkeyDisplay('hotkey-record', config.hotkey);
     }
 
     refreshSliderLabels();
@@ -461,133 +357,30 @@
    * @returns {Object} config data
    */
   function collectFormData() {
-    var config = {};
+    var config = FormBind.collect();
 
-    // -- General --
-    config.theme = getSelectValue('theme-select') || currentTheme;
-    config.language = getSelectValue('lang-select') || I18n.lang;
-    config.tray_icon_style = getSelectValue('tray-icon-select');
-    config.autostart = getBoolToggle('toggle-autostart');
-    config.start_minimized = getBoolToggle('toggle-start-minimized');
-    config.check_updates = getBoolToggle('toggle-check-updates');
-    config.telemetry = getBoolToggle('toggle-telemetry');
+    // Theme
+    config.theme = typeof currentTheme !== 'undefined' ? currentTheme :
+                   (typeof UiCore !== 'undefined' ? UiCore.theme : 'dark');
 
-    // Hotkeys
+    // Language
+    config.language = I18n.lang;
+
+    // Hotkeys (custom capture UI)
     config.hotkeys = {
       record: getHotkeyValue('hotkey-record'),
       feedback: getHotkeyValue('hotkey-feedback'),
       cancel: getHotkeyValue('hotkey-cancel'),
       paste_last: getHotkeyValue('hotkey-paste-last'),
-      translate: getHotkeyValue('hotkey-translate'),
-      min_hold_ms: getInputInt('hold-time-input', 200)
+      translate: getHotkeyValue('hotkey-translate')
     };
+    config.hotkey = config.hotkeys.record;
 
-    // Notifications
-    config.sound_feedback = getBoolToggle('toggle-sound-feedback');
-    config.show_overlay = getBoolToggle('toggle-show-overlay');
-    config.overlay_position = getSelectValue('overlay-position-select');
-
-    // -- Audio --
-    config.audio = {
-      device_id: getSelectValue('mic-select'),
-      auto_switch_device: getBoolToggle('toggle-auto-switch'),
-      noise_suppression: getBoolToggle('toggle-rnnoise'),
-      agc: getBoolToggle('toggle-agc'),
-      target_volume: getSliderInt('rms-slider'),
-      duck_other_apps: getBoolToggle('toggle-duck'),
-      duck_amount: getSliderInt('duck-slider'),
-      sample_rate: getSelectValue('sample-rate-select'),
-      save_recordings: getBoolToggle('toggle-save-recordings'),
-      save_path: getInputValue('save-path-input'),
-      auto_delete: getSelectValue('auto-delete-select')
-    };
-
-    // -- STT --
-    config.stt = {
-      mode: getSelectValue('stt-mode-select'),
-      beam_size: getSliderInt('beam-slider'),
-      temperature: getSliderInt('whisper-temp-slider'),
-      cpu_usage: getSliderInt('cpu-slider'),
-      vad_sensitivity: getSelectValue('vad-select')
-    };
-
-    // Collect provider cards for STT
-    config.stt.providers = collectProviderCards('stt-provider');
-
-    // -- LLM --
-    config.llm = {
-      enabled: getBoolToggle('toggle-llm-enabled'),
-      add_punctuation: getBoolToggle('toggle-punctuation'),
-      fix_grammar: getBoolToggle('toggle-grammar'),
-      fix_terminology: getBoolToggle('toggle-terminology'),
-      capitalize: getBoolToggle('toggle-capitalize'),
-      number_formatting: getBoolToggle('toggle-numbers'),
-      temperature: getSliderFloat('temp-slider', 100),
-      max_tokens: getInputInt('max-tokens-input', 512),
-      feedback_mode: getSelectValue('feedback-mode-select')
-    };
-
-    // Collect provider cards for LLM
-    config.llm.providers = collectProviderCards('llm-provider');
-
-    // -- Dictation --
-    config.dictation = {
-      context_aware: getBoolToggle('toggle-context-aware'),
-      default_style: getSelectValue('default-style-select'),
-      injection_method: getSelectValue('injection-method-select'),
-      auto_fallback_clipboard: getBoolToggle('toggle-auto-fallback-clipboard'),
-      typing_speed: getInputInt('typing-speed-input', 0),
-      sanitize_terminal: getBoolToggle('toggle-sanitize-terminal'),
-      confirm_multiline_terminal: getBoolToggle('toggle-confirm-multiline')
-    };
-
-    // -- Speaker Lock --
-    config.speaker_lock = {
-      enabled: getBoolToggle('toggle-speaker-lock'),
-      threshold: getSliderFloat('speaker-thresh', 100),
-      timeout_action: getSelectValue('speaker-timeout-select'),
-      log_rejected: getBoolToggle('toggle-log-rejected')
-    };
-
-    // -- Translate --
-    config.translate = {
-      enabled: getBoolToggle('toggle-page-translation'),
-      target_language: getSelectValue('target-lang-select'),
-      browser_dictation: getBoolToggle('toggle-browser-dictation'),
-      use_page_context: getBoolToggle('toggle-page-context')
-    };
-
-    // Collect provider cards for Translation
-    config.translate.providers = collectProviderCards('translate-provider');
-
-    // -- Network --
-    config.network = {
-      stt_timeout: getInputInt('stt-timeout-input', 30),
-      llm_timeout: getInputInt('llm-timeout-input', 30),
-      probe_timeout: getInputInt('probe-timeout-input', 5),
-      proxy_enabled: getBoolToggle('proxy-toggle'),
-      proxy_url: getInputValue('proxy-url-input'),
-      proxy_username: getInputValue('proxy-user-input'),
-      proxy_password: getInputValue('proxy-pass-input'),
-      listen_port: getInputInt('listen-port-input', 9876)
-    };
-
-    // -- History --
-    config.history = {
-      sensitive_mode: getBoolToggle('toggle-sensitive-mode'),
-      retention_days: getInputInt('retention-input', 90),
-      store_raw: getBoolToggle('toggle-store-raw'),
-      encrypt: getBoolToggle('toggle-encrypt-history')
-    };
-
-    // -- Offline --
-    config.offline = {
-      active_stt_model: getSelectValue('active-stt-model-select'),
-      active_llm_model: getSelectValue('active-llm-model-select'),
-      verify_integrity: getBoolToggle('toggle-verify-integrity'),
-      download_source: getSelectValue('download-source-select'),
-      llm_temperature: getSliderFloat('llm-offline-temp-slider', 100)
-    };
+    // Provider cards (dynamic structure)
+    if (!config.providers) config.providers = {};
+    config.providers.stt = collectProviderCards('stt-provider');
+    config.providers.llm = collectProviderCards('llm-provider');
+    config.providers.translation = collectProviderCards('translate-provider');
 
     return config;
   }
@@ -2989,142 +2782,23 @@
   }
 
 
-  // ---- Form helpers ----
+  // ---- Form helpers (non-declarative, still used by dynamic UI) ----
 
-  /**
-   * Set a select element's value by id.
-   * @param {string} id
-   * @param {*} value
-   */
-  function setSelectValue(id, value) {
-    var el = document.getElementById(id);
-    if (el && value !== undefined) el.value = value;
-  }
-
-  /**
-   * Set a select element's value by matching option text.
-   * @param {string} id
-   * @param {string} text
-   */
-  function setSelectByText(id, text) {
-    var el = document.getElementById(id);
-    if (!el || !text) return;
-    for (var i = 0; i < el.options.length; i++) {
-      if (el.options[i].textContent.trim() === text) {
-        el.selectedIndex = i;
-        return;
-      }
-    }
-  }
-
-  /**
-   * Get a select element's value by id.
-   * @param {string} id
-   * @returns {string}
-   */
   function getSelectValue(id) {
     var el = document.getElementById(id);
     return el ? el.value : '';
   }
 
-  /**
-   * Set an input element's value by id.
-   * @param {string} id
-   * @param {*} value
-   */
   function setInputValue(id, value) {
     var el = document.getElementById(id);
     if (el && value !== undefined) el.value = value;
   }
 
-  /**
-   * Get an input element's value by id.
-   * @param {string} id
-   * @returns {string}
-   */
   function getInputValue(id) {
     var el = document.getElementById(id);
     return el ? el.value : '';
   }
 
-  /**
-   * Get an input element's integer value.
-   * @param {string} id
-   * @param {number} fallback
-   * @returns {number}
-   */
-  function getInputInt(id, fallback) {
-    var val = parseInt(getInputValue(id), 10);
-    return isNaN(val) ? (fallback || 0) : val;
-  }
-
-  /**
-   * Set a toggle/checkbox by its container id.
-   * @param {string} id - Container element id
-   * @param {boolean} checked
-   */
-  function setBoolToggle(id, checked) {
-    var el = document.getElementById(id);
-    if (el) {
-      var input = el.tagName === 'INPUT' ? el : el.querySelector('input[type="checkbox"]');
-      if (input && checked !== undefined) input.checked = !!checked;
-    }
-  }
-
-  /**
-   * Get a toggle/checkbox state by its container id.
-   * @param {string} id
-   * @returns {boolean}
-   */
-  function getBoolToggle(id) {
-    var el = document.getElementById(id);
-    if (el) {
-      var input = el.tagName === 'INPUT' ? el : el.querySelector('input[type="checkbox"]');
-      return input ? input.checked : false;
-    }
-    return false;
-  }
-
-  /**
-   * Set a slider (range input) value by id.
-   * @param {string} id
-   * @param {*} value
-   */
-  function setSliderValue(id, value) {
-    var el = document.getElementById(id);
-    if (el && value !== undefined) {
-      el.value = value;
-      el.dispatchEvent(new Event('input'));
-    }
-  }
-
-  /**
-   * Get a slider integer value.
-   * @param {string} id
-   * @returns {number}
-   */
-  function getSliderInt(id) {
-    var el = document.getElementById(id);
-    return el ? parseInt(el.value, 10) : 0;
-  }
-
-  /**
-   * Get a slider float value with divisor.
-   * @param {string} id
-   * @param {number} divisor
-   * @returns {number}
-   */
-  function getSliderFloat(id, divisor) {
-    var el = document.getElementById(id);
-    if (!el) return 0;
-    return parseFloat(el.value) / (divisor || 1);
-  }
-
-  /**
-   * Set text content of an element by id.
-   * @param {string} id
-   * @param {*} text
-   */
   function setTextContent(id, text) {
     var el = document.getElementById(id);
     if (el) el.textContent = text !== undefined ? text : '';

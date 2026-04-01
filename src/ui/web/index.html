@@ -51,7 +51,7 @@
             <div class="form-label" data-i18n="general.language">Language</div>
             <div class="form-hint" data-i18n="general.language.hint">Interface language</div>
           </div>
-          <select id="lang-select"><option value="en">English</option><option value="uk">Ukrainian</option></select>
+          <select id="lang-select" data-cfg="language"><option value="en">English</option><option value="uk">Ukrainian</option></select>
         </div>
         <div class="form-row">
           <div>
@@ -89,7 +89,7 @@
             <div class="form-label" data-i18n="general.telemetry">Send anonymous usage statistics</div>
             <div class="form-hint" data-i18n="general.telemetry.hint">Help improve AI Polyglot Kit by sharing anonymous usage data (no audio or text content)</div>
           </div>
-          <label class="toggle"><input type="checkbox" id="toggle-telemetry"><span class="toggle-slider"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-telemetry" data-cfg="telemetry.enabled"><span class="toggle-slider"></span></label>
         </div>
       </div>
       <div class="card">
@@ -144,11 +144,11 @@
         <div class="card-title" data-i18n="general.notifications">Notifications</div>
         <div class="form-row">
           <div class="form-label" data-i18n="general.soundFeedback">Show sound feedback on recognition</div>
-          <label class="toggle"><input type="checkbox" id="toggle-sound-feedback" checked><span class="toggle-slider"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-sound-feedback" data-cfg="ui.sound_on_start" checked><span class="toggle-slider"></span></label>
         </div>
         <div class="form-row">
           <div class="form-label" data-i18n="general.showOverlay">Show recording overlay</div>
-          <label class="toggle"><input type="checkbox" id="toggle-show-overlay" checked><span class="toggle-slider"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-show-overlay" data-cfg="ui.show_notifications" checked><span class="toggle-slider"></span></label>
         </div>
         <div class="form-row">
           <div>
@@ -310,7 +310,7 @@
             <div class="form-hint" data-i18n="llm.temperature.hint">Lower = more consistent, higher = more creative</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="range" min="0" max="100" value="30" id="temp-slider">
+            <input type="range" min="0" max="100" value="30" id="temp-slider" data-cfg="normalization.temperature" data-divisor="100">
             <span style="font-size:12px;color:var(--fg-secondary);min-width:30px" id="temp-value">0.3</span>
           </div>
         </div>
@@ -345,7 +345,7 @@
         <div class="card-title" data-i18n="llm.features">Normalization Features</div>
         <div class="form-row">
           <div class="form-label" data-i18n="llm.enableNorm">Enable LLM text normalization</div>
-          <label class="toggle"><input type="checkbox" id="toggle-llm-enable" checked><span class="toggle-slider"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-llm-enable" data-cfg="normalization.enabled" checked><span class="toggle-slider"></span></label>
         </div>
         <div class="form-row">
           <div class="form-label" data-i18n="llm.addPunctuation">Add punctuation</div>
@@ -588,7 +588,7 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
             <div style="display:flex;align-items:center;gap:8px">
-              <input type="range" min="0" max="4" value="2" id="rms-slider" style="width:160px">
+              <input type="range" min="0" max="4" value="2" id="rms-slider" data-cfg="audio.gain" style="width:160px">
               <span style="font-size:12px;font-weight:600;color:var(--accent-highlight);min-width:90px" id="rms-value" data-i18n="slider.clearVoice">Clear voice</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--fg-secondary);padding:0 2px;width:160px">
@@ -601,7 +601,7 @@
             <div class="form-label" data-i18n="dictation.vadSensitivity">Voice detection sensitivity</div>
             <div class="form-hint" data-i18n="dictation.vadSensitivity.hint">Controls how aggressively the app detects when you stop talking. Lower = more sensitive, catches soft speech but may include background noise. Higher = stricter, cleanly cuts silence but may trim quiet endings. Level 2 works well for most people.</div>
           </div>
-          <select id="vad-select"><option data-i18n="dictation.vad.0">0 — Very sensitive (catches quiet speech)</option><option data-i18n="dictation.vad.1">1 — Sensitive</option><option selected data-i18n="dictation.vad.2">2 — Balanced (recommended)</option><option data-i18n="dictation.vad.3">3 — Strict (clean cuts, may trim quiet endings)</option></select>
+          <select id="vad-select" data-cfg="audio.vad_aggressiveness"><option data-i18n="dictation.vad.0">0 — Very sensitive (catches quiet speech)</option><option data-i18n="dictation.vad.1">1 — Sensitive</option><option selected data-i18n="dictation.vad.2">2 — Balanced (recommended)</option><option data-i18n="dictation.vad.3">3 — Strict (clean cuts, may trim quiet endings)</option></select>
         </div>
       </div>
       <div class="card">
@@ -643,7 +643,7 @@
             <div class="form-label" data-i18n="dictation.defaultInjection">Default injection method</div>
             <div class="form-hint" data-i18n="dictation.defaultInjection.hint">How text is typed into the target app</div>
           </div>
-          <select id="injection-method-select"><option selected data-i18n="injection.sendInput">Keyboard simulation (SendInput)</option><option data-i18n="injection.clipboard">Clipboard paste (Ctrl+V)</option><option data-i18n="injection.uiAutomation">UI Automation (SetValue)</option></select>
+          <select id="injection-method-select" data-cfg="text_injection.method"><option selected data-i18n="injection.sendInput">Keyboard simulation (SendInput)</option><option data-i18n="injection.clipboard">Clipboard paste (Ctrl+V)</option><option data-i18n="injection.uiAutomation">UI Automation (SetValue)</option></select>
         </div>
         <div class="form-row">
           <div class="form-label" data-i18n="dictation.fallbackClipboard">Auto-fallback to clipboard on failure</div>
@@ -2180,6 +2180,7 @@
 
 <script src="js/i18n-data.js"></script>
 <script src="js/i18n.js"></script>
+<script src="js/form-bind.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
