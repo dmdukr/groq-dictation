@@ -115,9 +115,43 @@ def _open_webview_window(
         )
 
     bridge.set_window(window)
+
+    def _on_shown() -> None:
+        try:
+            set_titlebar_theme(window, "dark")
+        except Exception:
+            logger.debug("Could not set titlebar theme", exc_info=True)
+
+    window.events.shown += _on_shown
     logger.info("PyWebView Settings window created")
     webview.start(debug=not getattr(sys, "frozen", False))
     logger.info("PyWebView Settings window closed")
+
+
+def set_titlebar_theme(window: object, theme: str = "dark") -> None:
+    """Paint native Windows title bar using DWM API."""
+    import contextlib  # noqa: PLC0415
+    import ctypes  # noqa: PLC0415
+    import ctypes.wintypes  # noqa: PLC0415
+
+    hwnd = None
+    with contextlib.suppress(Exception):
+        hwnd = window.gui.BrowserView.Handle.ToInt32()  # type: ignore[union-attr]
+    if not hwnd:
+        with contextlib.suppress(Exception):
+            hwnd = ctypes.windll.user32.FindWindowW(None, "AI Polyglot Kit \u2014 Settings")
+    if not hwnd:
+        return
+
+    is_dark = theme == "dark"
+    value = ctypes.c_int(1 if is_dark else 0)
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
+
+    caption_bgr = ctypes.c_int(0x002E1E1E if is_dark else 0x00E4ECF0)
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(caption_bgr), ctypes.sizeof(caption_bgr))
+
+    text_bgr = ctypes.c_int(0x00E8E0E0 if is_dark else 0x0020252C)
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(text_bgr), ctypes.sizeof(text_bgr))
 
 
 def _find_web_dir() -> Path | None:
